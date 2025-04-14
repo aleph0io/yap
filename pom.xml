@@ -1,0 +1,131 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>io.aleph0</groupId>
+    <artifactId>yap</artifactId>
+    <version>0.0.0-SNAPSHOT</version>
+    <name>yap</name>
+    <inceptionYear>2025</inceptionYear>
+    <description>yap is a Yet Another Pipeline for Java 21+</description>
+    <url>https://github.com/aleph0io/yap</url>
+    <packaging>pom</packaging>
+
+    <organization>
+        <name>aleph0</name>
+        <url>https://www.aleph0.io/</url>
+    </organization>
+
+    <scm>
+        <connection>scm:git:ssh://git@github.com/aleph0io/yap.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/aleph0io/yap.git</developerConnection>
+        <url>https://github.com/aleph0io/yap/tree/main</url>
+        <tag>v0.0.0</tag>
+    </scm>
+
+    <developers>
+        <developer>
+            <name>Andy Boothe</name>
+            <email>andy@aleph0.io</email>
+        </developer>
+    </developers>
+
+    <distributionManagement>
+        <snapshotRepository>
+            <id>ossrh</id>
+            <name>Sonatype Nexus Snapshots</name>
+            <url>https://oss.sonatype.org/content/repositories/snapshots/</url>
+        </snapshotRepository>
+        <repository>
+            <id>ossrh</id>
+            <name>Nexus Release Repository</name>
+            <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
+        </repository>
+    </distributionManagement>
+
+    <issueManagement>
+        <system>GitHub</system>
+        <url>https://github.com/aleph0io/yap</url>
+    </issueManagement>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <java.release>21</java.release>
+        <maven.compiler.source>${java.release}</maven.compiler.source>
+        <maven.compiler.target>${java.release}</maven.compiler.target>
+    </properties>
+
+    <build>
+        <plugins>
+            <!-- Configuration compilation -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.14.0</version>
+                <configuration>
+                    <source>${java.release}</source>
+                    <target>${java.release}</target>
+                    <release>${java.release}</release>
+                </configuration>
+            </plugin>
+
+            <!-- Add generated source code to build -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <version>3.6.0</version>
+                <executions>
+                    <execution>
+                        <id>add-generated-sources</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>add-source</goal>
+                        </goals>
+                        <configuration>
+                            <sources>
+                                <source>
+                                    ${project.build.directory}/generated-sources/annotations</source>
+                            </sources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-bom</artifactId>
+                <version>2.0.17</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.junit</groupId>
+                <artifactId>junit-bom</artifactId>
+                <version>5.12.1</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.assertj</groupId>
+                <artifactId>assertj-bom</artifactId>
+                <version>3.27.3</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.mockito</groupId>
+                <artifactId>mockito-bom</artifactId>
+                <version>5.17.0</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>        
+        </dependencies>
+    </dependencyManagement>
+
+    <modules>
+        <module>yap-core</module>
+    </modules>
+</project>
