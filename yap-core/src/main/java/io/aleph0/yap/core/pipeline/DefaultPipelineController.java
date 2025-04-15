@@ -12,12 +12,35 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
+import io.aleph0.yap.core.build.PipelineControllerBuilder;
 import io.aleph0.yap.core.pipeline.action.PipelineAction;
 import io.aleph0.yap.core.task.DefaultTaskController.TaskState;
 
 public class DefaultPipelineController implements PipelineController {
   private static final org.slf4j.Logger LOGGER =
       org.slf4j.LoggerFactory.getLogger(DefaultPipelineController.class);
+
+  public static Builder builder() {
+    return new Builder();
+  }
+
+  public static class Builder implements PipelineControllerBuilder {
+    private Duration heartbeatInterval = Duration.ofMinutes(1L);
+
+    public Builder setHeartbeatInterval(Duration heartbeatInterval) {
+      if (heartbeatInterval == null)
+        throw new NullPointerException();
+      if (heartbeatInterval.isNegative() || heartbeatInterval.isZero())
+        throw new IllegalArgumentException("heartbeatInterval must be positive");
+      this.heartbeatInterval = heartbeatInterval;
+      return this;
+    }
+
+    @Override
+    public DefaultPipelineController build(Map<String, Set<String>> graph) {
+      return new DefaultPipelineController(graph, heartbeatInterval);
+    }
+  }
 
   /**
    * The internal state of a pipeline. The pipeline starts in the {@link TaskState#READY} state. The

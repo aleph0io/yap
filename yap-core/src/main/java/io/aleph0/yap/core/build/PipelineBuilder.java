@@ -12,6 +12,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 import io.aleph0.yap.core.ConsumerWorker;
 import io.aleph0.yap.core.Pipeline;
 import io.aleph0.yap.core.ProcessorWorker;
@@ -35,9 +36,26 @@ import io.aleph0.yap.core.worker.ProcessorWorkerFactory;
 import io.aleph0.yap.core.worker.ProducerWorkerFactory;
 
 public class PipelineBuilder {
-  private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+  private static final AtomicInteger sequence = new AtomicInteger(1);
+
+  private ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+  private PipelineControllerBuilder controller = DefaultPipelineController.builder();
   private final Map<String, TaskBuilder> tasks = new LinkedHashMap<>();
   private final List<PipelineWrapper> wrappers = new ArrayList<>();
+
+  public PipelineBuilder setExecutor(ExecutorService executor) {
+    if (executor == null)
+      throw new IllegalArgumentException("executor must not be null");
+    this.executor = executor;
+    return this;
+  }
+
+  public PipelineBuilder setPipelineController(PipelineControllerBuilder controller) {
+    if (controller == null)
+      throw new IllegalArgumentException("controller must not be null");
+    this.controller = controller;
+    return this;
+  }
 
   public <OutputT> ProducerTaskBuilder<OutputT, NoMetrics> addProducer(String id,
       ProducerWorker<OutputT> worker) {
@@ -321,11 +339,12 @@ public class PipelineBuilder {
         taskBodies.stream().map(t -> Map.entry(t.getId(), t.getSubscribers()))
             .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
 
-    final PipelineController pipelineController =
-        new DefaultPipelineController(graph, Duration.ofSeconds(30));
+    final PipelineController pipelineController = controller.build(graph);
+
+    final int id = sequence.getAndIncrement();
 
     Pipeline result =
-        new DefaultPipeline(new PipelineManager(1, executor, pipelineController, taskBodies));
+        new DefaultPipeline(new PipelineManager(id, executor, pipelineController, taskBodies));
     for (PipelineWrapper wrapper : wrappers)
       result = wrapper.wrapPipeline(result);
 
