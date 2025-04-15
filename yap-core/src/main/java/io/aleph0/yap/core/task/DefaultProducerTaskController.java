@@ -10,12 +10,12 @@ public class DefaultProducerTaskController<OutputT> extends DefaultTaskControlle
 
   public static class Builder<OutputT>
       implements TaskController.ProducerTaskControllerBuilder<OutputT> {
-    private int parallelism = 1;
+    private int desiredConcurrency = 1;
 
-    public Builder<OutputT> setParallelism(int parallelism) {
+    public Builder<OutputT> setDesiredConcurrency(int parallelism) {
       if (parallelism < 1)
-        throw new IllegalArgumentException("parallelism must be at least 1");
-      this.parallelism = parallelism;
+        throw new IllegalArgumentException("desiredConcurrency must be at least 1");
+      this.desiredConcurrency = parallelism;
       return this;
     }
 
@@ -32,7 +32,7 @@ public class DefaultProducerTaskController<OutputT> extends DefaultTaskControlle
 
     @Override
     public DefaultProducerTaskController<OutputT> build(Topic<OutputT> topic) {
-      return new DefaultProducerTaskController<>(parallelism, heartbeatInterval, topic);
+      return new DefaultProducerTaskController<>(desiredConcurrency, heartbeatInterval, topic);
     }
   }
 

@@ -10,12 +10,12 @@ public class DefaultConsumerTaskController<InputT> extends DefaultTaskController
 
   public static class Builder<InputT>
       implements TaskController.ConsumerTaskControllerBuilder<InputT> {
-    private int parallelism = 1;
+    private int desiredConcurrency = 1;
 
-    public Builder<InputT> setParallelism(int parallelism) {
+    public Builder<InputT> setDesiredConcurrency(int parallelism) {
       if (parallelism < 1)
-        throw new IllegalArgumentException("parallelism must be at least 1");
-      this.parallelism = parallelism;
+        throw new IllegalArgumentException("desiredConcurrency must be at least 1");
+      this.desiredConcurrency = parallelism;
       return this;
     }
 
@@ -32,7 +32,7 @@ public class DefaultConsumerTaskController<InputT> extends DefaultTaskController
 
     @Override
     public DefaultConsumerTaskController<InputT> build(Queue<InputT> queue) {
-      return new DefaultConsumerTaskController<>(parallelism, heartbeatInterval, queue);
+      return new DefaultConsumerTaskController<>(desiredConcurrency, heartbeatInterval, queue);
     }
   }
 

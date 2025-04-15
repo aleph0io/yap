@@ -12,12 +12,12 @@ public final class DefaultProcessorTaskController<InputT, OutputT>
 
   public static class Builder<InputT, OutputT>
       implements TaskController.ProcessorTaskControllerBuilder<InputT, OutputT> {
-    private int parallelism = 1;
+    private int desiredConcurrency = 1;
 
-    public Builder<InputT, OutputT> setParallelism(int parallelism) {
+    public Builder<InputT, OutputT> setDesiredConcurrency(int parallelism) {
       if (parallelism < 1)
-        throw new IllegalArgumentException("parallelism must be at least 1");
-      this.parallelism = parallelism;
+        throw new IllegalArgumentException("desiredConcurrency must be at least 1");
+      this.desiredConcurrency = parallelism;
       return this;
     }
 
@@ -34,7 +34,7 @@ public final class DefaultProcessorTaskController<InputT, OutputT>
 
     @Override
     public TaskController build(Queue<InputT> queue, Topic<OutputT> topic) {
-      return new DefaultTaskController<>(parallelism, heartbeatInterval, queue, topic);
+      return new DefaultTaskController<>(desiredConcurrency, heartbeatInterval, queue, topic);
     }
   }
 
