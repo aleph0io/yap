@@ -11,6 +11,7 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import io.aleph0.yap.core.build.PipelineBuilder;
+import io.aleph0.yap.core.pipeline.MonitoredPipeline;
 
 public class PipelineTest {
   @Test
@@ -50,7 +51,7 @@ public class PipelineTest {
     add1.addSubscriber(consumer);
     add3.addSubscriber(consumer);
 
-    pb.buildAndStart().await();
+    pb.addWrapper(MonitoredPipeline.newWrapper()).buildAndStart().await();
 
     // p.start();
 

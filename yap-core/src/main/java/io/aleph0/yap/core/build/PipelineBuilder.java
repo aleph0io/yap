@@ -42,6 +42,7 @@ public class PipelineBuilder {
   private PipelineControllerBuilder controller = DefaultPipelineController.builder();
   private final Map<String, TaskBuilder> tasks = new LinkedHashMap<>();
   private final List<PipelineWrapper> wrappers = new ArrayList<>();
+  private final List<Pipeline.LifecycleListener> lifecycleListeners = new ArrayList<>();
 
   public PipelineBuilder setExecutor(ExecutorService executor) {
     if (executor == null)
@@ -148,6 +149,11 @@ public class PipelineBuilder {
 
   public PipelineBuilder addWrapper(PipelineWrapper wrapper) {
     wrappers.add(wrapper);
+    return this;
+  }
+
+  public PipelineBuilder addLifecycleListener(Pipeline.LifecycleListener listener) {
+    lifecycleListeners.add(listener);
     return this;
   }
 
@@ -347,6 +353,9 @@ public class PipelineBuilder {
         new DefaultPipeline(new PipelineManager(id, executor, pipelineController, taskBodies));
     for (PipelineWrapper wrapper : wrappers)
       result = wrapper.wrapPipeline(result);
+
+    for (Pipeline.LifecycleListener listener : lifecycleListeners)
+      result.addLifecycleListener(listener);
 
     return result;
   }
