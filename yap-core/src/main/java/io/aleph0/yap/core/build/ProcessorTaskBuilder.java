@@ -40,13 +40,13 @@ public final class ProcessorTaskBuilder<InputT, OutputT, MetricsT> implements Ta
   }
 
   public <NextT> ProcessorTaskBuilder<InputT, OutputT, MetricsT> addSubscriber(
-      ProcessorTaskBuilder<OutputT, NextT, MetricsT> subscriber) {
+      ProcessorTaskBuilder<OutputT, NextT, ?> subscriber) {
     subscribers.add(subscriber.getId());
     return this;
   }
 
   public ProcessorTaskBuilder<InputT, OutputT, MetricsT> addSubscriber(
-      ConsumerTaskBuilder<OutputT, MetricsT> subscriber) {
+      ConsumerTaskBuilder<OutputT, ?> subscriber) {
     subscribers.add(subscriber.getId());
     return this;
   }

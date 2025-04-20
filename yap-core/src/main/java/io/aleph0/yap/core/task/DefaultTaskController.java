@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import io.aleph0.yap.core.ConsumerWorker;
 import io.aleph0.yap.core.ProcessorWorker;
 import io.aleph0.yap.core.ProducerWorker;
+import io.aleph0.yap.core.task.TaskManager.WorkerEvent;
 import io.aleph0.yap.core.task.action.TaskAction;
 import io.aleph0.yap.core.transport.Queue;
 import io.aleph0.yap.core.transport.Topic;
@@ -291,7 +292,7 @@ public class DefaultTaskController<InputT, OutputT> implements TaskController {
    * The number of workers that are currently running.
    */
   int workers = 0;
-  
+
   /**
    * The number of workers that are starting, but haven't started yet.
    */
@@ -436,20 +437,16 @@ public class DefaultTaskController<InputT, OutputT> implements TaskController {
   }
 
   @Override
-  public List<TaskAction> onWorkerCompletedExceptionally(int id, Throwable t) {
+  public List<TaskAction> onWorkerCompletedExceptionally(int id, Throwable error) {
     workers = workers - 1;
 
     // Update our failure cause. Try to keep all the problems.
+    while (error instanceof ExecutionException)
+      error = error.getCause();
     if (failureCause == null)
-      failureCause = new ExecutionException("Error in task " + id, t);
-    else {
-      final ExecutionException newFailureCause =
-          new ExecutionException("Error in task " + id, failureCause.getCause());
-      for (Throwable s : failureCause.getSuppressed())
-        newFailureCause.addSuppressed(s);
-      newFailureCause.addSuppressed(t);
-      failureCause = newFailureCause;
-    }
+      failureCause = new ExecutionException("Error in task " + id, error);
+    else
+      failureCause.addSuppressed(error);
 
     final List<TaskAction> actions = new ArrayList<>();
     switch (state) {
@@ -533,7 +530,7 @@ public class DefaultTaskController<InputT, OutputT> implements TaskController {
   public void onTaskCancelled() {}
 
   @Override
-  public void onTaskFailed(Throwable e) {}
+  public void onTaskFailed(ExecutionException e) {}
 
   @Override
   public Duration getHeartbeatInterval() {

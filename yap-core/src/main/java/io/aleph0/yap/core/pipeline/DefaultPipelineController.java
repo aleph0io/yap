@@ -440,7 +440,7 @@ public class DefaultPipelineController implements PipelineController {
   public void onPipelineCompleted() {}
 
   @Override
-  public void onPipelineFailed(Throwable error) {}
+  public void onPipelineFailed(ExecutionException error) {}
 
   @Override
   public void onPipelineCancelled() {}

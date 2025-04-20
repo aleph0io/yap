@@ -2,6 +2,7 @@ package io.aleph0.yap.core;
 
 import static java.util.stream.Collectors.toSet;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.util.Set;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
@@ -53,14 +54,52 @@ public class PipelineTest {
 
     pb.addWrapper(MonitoredPipeline.newWrapper()).buildAndStart().await();
 
-    // p.start();
-
-    // p.await();
-
     assertThat(results).isEqualTo(Stream.of(
         // add1
         2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
         // add3
         4, 5, 6, 7, 8, 9, 10, 11, 12, 13).collect(toSet()));
+  }
+
+  @Test
+  @Timeout(value = 5, unit = TimeUnit.SECONDS)
+  public void failureTest() {
+
+    final PipelineBuilder pb = Pipeline.builder();
+
+    final var producer = pb.addProducer("producer", (Sink<Integer> sink) -> {
+      for (int i = 1; i <= 10; i++) {
+        sink.put(i);
+      }
+    });
+
+    final var add1 = pb.addProcessor("add1", (Source<Integer> source, Sink<Integer> sink) -> {
+      for (Integer n = source.take(); n != null; n = source.take()) {
+        if (n == 1)
+          throw new RuntimeException("simulated failure");
+        sink.put(n + 1);
+      }
+    });
+    producer.addSubscriber(add1);
+
+    final var add3 = pb.addProcessor("add3", (Source<Integer> source, Sink<Integer> sink) -> {
+      for (Integer n = source.take(); n != null; n = source.take()) {
+        sink.put(n + 3);
+      }
+    });
+    producer.addSubscriber(add3);
+
+    final Set<Integer> results = ConcurrentHashMap.newKeySet();
+    final var consumer = pb.addConsumer("consumer", (Source<Integer> source) -> {
+      for (Integer n = source.take(); n != null; n = source.take()) {
+        results.add(n);
+      }
+    });
+    add1.addSubscriber(consumer);
+    add3.addSubscriber(consumer);
+
+    assertThatThrownBy(() -> pb.addWrapper(MonitoredPipeline.newWrapper()).buildAndStart().await())
+        .isInstanceOf(ExecutionException.class).hasCauseInstanceOf(RuntimeException.class)
+        .hasMessageContaining("simulated failure");
   }
 }

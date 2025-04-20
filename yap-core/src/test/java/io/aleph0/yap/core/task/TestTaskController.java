@@ -109,5 +109,5 @@ public class TestTaskController implements TaskController {
   public void onTaskCancelled() {}
 
   @Override
-  public void onTaskFailed(Throwable e) {}
+  public void onTaskFailed(ExecutionException e) {}
 }

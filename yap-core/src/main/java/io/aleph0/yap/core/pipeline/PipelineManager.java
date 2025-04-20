@@ -11,6 +11,7 @@ import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -159,7 +160,7 @@ public class PipelineManager implements Measureable<PipelineManager.Metrics> {
   static record TaskCompletedEvent(String id) implements PipelineEvent {
   }
 
-  static record TaskFailedEvent(String id, Throwable cause) implements PipelineEvent {
+  static record TaskFailedEvent(String id, ExecutionException cause) implements PipelineEvent {
   }
 
   static record TaskCancelledEvent(String id) implements PipelineEvent {
@@ -286,7 +287,7 @@ public class PipelineManager implements Measureable<PipelineManager.Metrics> {
     }
 
     @Override
-    public void onTaskFailed(String task, Throwable cause) {
+    public void onTaskFailed(String task, ExecutionException cause) {
       events.offer(new TaskFailedEvent(task, cause));
     }
   }
@@ -299,7 +300,7 @@ public class PipelineManager implements Measureable<PipelineManager.Metrics> {
   private final BlockingQueue<PipelineEvent> events = new LinkedBlockingQueue<>();
   private final List<LifecycleListener> lifecycleListeners = new CopyOnWriteArrayList<>();
   private volatile PipelineState state = PipelineState.READY;
-  private Exception failureCause;
+  private ExecutionException failureCause;
 
   public PipelineManager(int id, ExecutorService executor, PipelineController controller,
       List<TaskManager<?>> tasks) {
@@ -397,6 +398,18 @@ public class PipelineManager implements Measureable<PipelineManager.Metrics> {
         taskFuture.cancel(true);
       notifyLifecycleListeners(listener -> listener.onPipelineFailed(id, e));
       throw e;
+    }
+
+    // We want to propagate the failure cause if the pipeline failed for use in Future.get()
+    if (state == PipelineState.FAILED && failureCause != null) {
+      LOGGER.atDebug().addKeyValue("pipeline", id).setCause(failureCause)
+          .log("Pipeline failed with exception, propagating...");
+      final Throwable cause = failureCause.getCause();
+      if (cause instanceof Exception)
+        throw (Exception) cause;
+      if (cause instanceof Error)
+        throw (Error) cause;
+      throw failureCause;
     }
   }
 
@@ -496,7 +509,7 @@ public class PipelineManager implements Measureable<PipelineManager.Metrics> {
         state = state.to(PipelineState.CANCELLED);
         break;
       }
-      case FailPipelineAction(Exception cause): {
+      case FailPipelineAction(ExecutionException cause): {
         LOGGER.atDebug().addKeyValue("pipeline", id).setCause(cause).log("Failed pipeline");
         state = state.to(PipelineState.FAILED);
         failureCause = cause;

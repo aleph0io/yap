@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -190,7 +191,7 @@ public class TaskManager<WorkerMetricsT>
 
     default void onTaskCancelled(String task) {}
 
-    default void onTaskFailed(String task, Throwable cause) {}
+    default void onTaskFailed(String task, ExecutionException cause) {}
   }
 
   @FunctionalInterface
@@ -333,7 +334,7 @@ public class TaskManager<WorkerMetricsT>
   private final Queue<?> queue;
   private final Topic<?> topic;
   private volatile TaskState state = TaskState.READY;
-  private Exception failureCause = null;
+  private ExecutionException failureCause = null;
 
   public TaskManager(String id, Set<String> subscribers, ExecutorService executor,
       TaskController controller, WorkerBodyFactory<WorkerMetricsT> workerBodyFactory,
@@ -438,7 +439,8 @@ public class TaskManager<WorkerMetricsT>
       state = TaskState.FAILED;
       for (Future<?> workerFuture : workers.values())
         workerFuture.cancel(true);
-      notifyLifecycleListeners(listener -> listener.onTaskFailed(id, e));
+      final ExecutionException cause = new ExecutionException(e);
+      notifyLifecycleListeners(listener -> listener.onTaskFailed(id, cause));
       throw e;
     } finally {
       if (topic != null)
@@ -534,7 +536,7 @@ public class TaskManager<WorkerMetricsT>
         LOGGER.atDebug().log("Canceled task");
         break;
       }
-      case FailTaskAction(Exception cause): {
+      case FailTaskAction(ExecutionException cause): {
         state = state.to(TaskState.FAILED);
         failureCause = cause;
         LOGGER.atDebug().setCause(cause).log("Failed task");

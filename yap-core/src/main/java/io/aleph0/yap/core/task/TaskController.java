@@ -2,6 +2,7 @@ package io.aleph0.yap.core.task;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 import io.aleph0.yap.core.task.action.TaskAction;
 import io.aleph0.yap.core.transport.Queue;
 import io.aleph0.yap.core.transport.Topic;
@@ -119,5 +120,5 @@ public interface TaskController {
    * 
    * @param e the exception that caused the task to fail
    */
-  public void onTaskFailed(Throwable e);
+  public void onTaskFailed(ExecutionException e);
 }

@@ -191,7 +191,7 @@ public class TestPipelineController implements PipelineController {
   public void onPipelineCompleted() {}
 
   @Override
-  public void onPipelineFailed(Throwable error) {}
+  public void onPipelineFailed(ExecutionException cause) {}
 
   @Override
   public void onPipelineCancelled() {}

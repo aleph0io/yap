@@ -2,6 +2,7 @@ package io.aleph0.yap.core.pipeline;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 import io.aleph0.yap.core.Pipeline;
 import io.aleph0.yap.core.pipeline.action.PipelineAction;
 
@@ -88,7 +89,7 @@ public interface PipelineController {
   /**
    * Called when the pipeline has failed. This is the last event that will be called.
    */
-  public void onPipelineFailed(Throwable error);
+  public void onPipelineFailed(ExecutionException cause);
 
   /**
    * Called when the pipeline has been cancelled. This is the last event that will be called.

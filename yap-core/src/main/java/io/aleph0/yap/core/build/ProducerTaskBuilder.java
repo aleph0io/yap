@@ -38,13 +38,13 @@ public final class ProducerTaskBuilder<OutputT, MetricsT> implements TaskBuilder
   }
 
   public <NextT> ProducerTaskBuilder<OutputT, MetricsT> addSubscriber(
-      ProcessorTaskBuilder<OutputT, NextT, MetricsT> subscriber) {
+      ProcessorTaskBuilder<OutputT, NextT, ?> subscriber) {
     subscribers.add(subscriber.getId());
     return this;
   }
 
   public ProducerTaskBuilder<OutputT, MetricsT> addSubscriber(
-      ConsumerTaskBuilder<OutputT, MetricsT> subscriber) {
+      ConsumerTaskBuilder<OutputT, ?> subscriber) {
     subscribers.add(subscriber.getId());
     return this;
   }

@@ -2,6 +2,7 @@ package io.aleph0.yap.core.pipeline;
 
 import static java.util.Objects.requireNonNull;
 import java.util.List;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
@@ -48,11 +49,11 @@ public class DefaultPipeline implements Pipeline {
       // If the pipeline is already started, we don't want to start it again.
       return;
     }
-    future = Executors.newVirtualThreadPerTaskExecutor().submit(() -> {
-      try {
+    future = Executors.newVirtualThreadPerTaskExecutor().submit(new Callable<Void>() {
+      @Override
+      public Void call() throws Exception {
         manager.run();
-      } catch (Exception e) {
-        e.printStackTrace();
+        return null;
       }
     });
   }
