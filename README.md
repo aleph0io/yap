@@ -1,4 +1,4 @@
-# yap (Yet Another Pipeline)
+# yap (Yet Another Pipeline) [![tests](https://github.com/aleph0io/yap/actions/workflows/tests.yml/badge.svg)](https://github.com/aleph0io/yap/actions/workflows/tests.yml) ![Maven Central Version](https://img.shields.io/maven-central/v/io.aleph0/yap-core) [![javadoc](https://javadoc.io/badge2/io.aleph0/yap-core/javadoc.svg)](https://javadoc.io/doc/io.aleph0/yap-core)
 
 **yap** is a lightweight Java 21+ library for building simple, local, imperative-style concurrent processing pipelines lifecycle observability.
 
