@@ -30,6 +30,7 @@ import io.aleph0.yap.core.transport.Channel;
 import io.aleph0.yap.core.transport.Queue;
 import io.aleph0.yap.core.transport.Topic;
 import io.aleph0.yap.core.transport.channel.DefaultChannel;
+import io.aleph0.yap.core.util.DirectedGraphs;
 import io.aleph0.yap.core.util.NoMetrics;
 import io.aleph0.yap.core.worker.ConsumerWorkerFactory;
 import io.aleph0.yap.core.worker.ProcessorWorkerFactory;
@@ -188,9 +189,13 @@ public class PipelineBuilder {
     for (TaskBuilder task : tasks.values()) {
       switch (task) {
         case ProducerTaskBuilder<?, ?> producer:
+          if (!subscriptions.containsKey(producer.id))
+            throw new IllegalArgumentException("Producer " + producer.id + " has no subscribers");
           topics.put(producer.id, producer.topic.build((List) subscriptions.get(producer.id)));
           break;
         case ProcessorTaskBuilder<?, ?, ?> processor:
+          if (!subscriptions.containsKey(processor.id))
+            throw new IllegalArgumentException("Processor " + processor.id + " has no subscribers");
           topics.put(processor.id, processor.topic.build((List) subscriptions.get(processor.id)));
           break;
         case ConsumerTaskBuilder<?, ?> consumer:
@@ -207,9 +212,13 @@ public class PipelineBuilder {
           // producers have no queue
           break;
         case ProcessorTaskBuilder<?, ?, ?> processor:
+          if (!subscribers.containsKey(processor.id))
+            throw new IllegalArgumentException("Processor " + processor.id + " has no producers");
           queues.put(processor.id, processor.queue.build((List) subscribers.get(processor.id)));
           break;
         case ConsumerTaskBuilder<?, ?> consumer:
+          if (!subscribers.containsKey(consumer.id))
+            throw new IllegalArgumentException("Consumer " + consumer.id + " has no producers");
           queues.put(consumer.id, consumer.queue.build((List) subscribers.get(consumer.id)));
           break;
       }
@@ -344,6 +353,14 @@ public class PipelineBuilder {
     final Map<String, Set<String>> graph =
         taskBodies.stream().map(t -> Map.entry(t.getId(), t.getSubscribers()))
             .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+    if (!DirectedGraphs.isWeaklyConnected(graph))
+      throw new IllegalArgumentException("Pipeline contains disconnected node(s)");
+
+    DirectedGraphs.findCycle(graph).ifPresent(cycle -> {
+      throw new IllegalArgumentException(
+          "Pipeline contains cycle(s): " + String.join(" -> ", cycle));
+    });
 
     final PipelineController pipelineController = controller.build(graph);
 

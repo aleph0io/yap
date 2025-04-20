@@ -102,4 +102,50 @@ public class PipelineTest {
         .isInstanceOf(ExecutionException.class).hasCauseInstanceOf(RuntimeException.class)
         .hasMessageContaining("simulated failure");
   }
+
+  @Test
+  @Timeout(value = 5, unit = TimeUnit.SECONDS)
+  public void cycleTest() {
+    final PipelineBuilder pb = Pipeline.builder();
+
+    final var producer = pb.addProducer("producer", (Sink<Integer> sink) -> {
+      for (int i = 1; i <= 10; i++) {
+        sink.put(i);
+      }
+    });
+
+    final var add1 = pb.addProcessor("add1", (Source<Integer> source, Sink<Integer> sink) -> {
+      for (Integer n = source.take(); n != null; n = source.take()) {
+        sink.put(n + 1);
+      }
+    });
+    producer.addSubscriber(add1);
+
+    // This creates a cycle
+    add1.addSubscriber(add1);
+
+    assertThatThrownBy(() -> pb.addWrapper(MonitoredPipeline.newWrapper()).buildAndStart().await())
+        .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("cycle");
+  }
+
+  @Test
+  @Timeout(value = 5, unit = TimeUnit.SECONDS)
+  public void disconnectedTest() {
+    final PipelineBuilder pb = Pipeline.builder();
+
+    final var producer = pb.addProducer("producer", (Sink<Integer> sink) -> {
+      for (int i = 1; i <= 10; i++) {
+        sink.put(i);
+      }
+    });
+
+    final var add1 = pb.addProcessor("add1", (Source<Integer> source, Sink<Integer> sink) -> {
+      for (Integer n = source.take(); n != null; n = source.take()) {
+        sink.put(n + 1);
+      }
+    });
+
+    assertThatThrownBy(() -> pb.addWrapper(MonitoredPipeline.newWrapper()).buildAndStart().await())
+        .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("subscriber");
+  }
 }
