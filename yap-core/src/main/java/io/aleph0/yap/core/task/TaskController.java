@@ -101,9 +101,9 @@ public interface TaskController {
    * @return the next action to perform
    * 
    * @see TaskAction#newStopWorkerTaskAction()
-   * @see TaskAction#newCancelTaskAction()
+   * @see TaskAction#newCancelTask()
    * @see TaskAction#newSucceedTask()
-   * @see TaskAction#newFailTask(Exception)
+   * @see TaskAction#newFailTask(ExecutionException)
    */
   public List<TaskAction> onCancelRequested();
 

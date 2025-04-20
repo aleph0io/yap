@@ -94,7 +94,7 @@ public class DefaultTaskController<InputT, OutputT> implements TaskController {
      * controller stays in this state until one of the following events:
      * 
      * <ul>
-     * <li>If {@link #onWorkerCompletedNormally() a worker completes normally}, then move to
+     * <li>If {@link #onWorkerCompletedNormally(int) a worker completes normally}, then move to
      * {@link #COMPLETING}</li>
      * <li>If {@link #onWorkerCompletedExceptionally(int,Throwable) a worker completes
      * exceptionally}, then move to {@link #FAILING}.</li>
@@ -128,8 +128,8 @@ public class DefaultTaskController<InputT, OutputT> implements TaskController {
      * The controller stays in this state until one of the following events:
      * 
      * <ul>
-     * <li>If the last worker {@link #onWorkerCompletedNormally() completes normally}, then move to
-     * {@link #COMPLETED}.</li>
+     * <li>If the last worker {@link #onWorkerCompletedNormally(int) completes normally}, then move
+     * to {@link #COMPLETED}.</li>
      * <li>
      * <li>If a worker {@link #onWorkerCompletedExceptionally(int,Throwable) completes
      * exceptionally}, then move to {@link #FAILING}. If it is the last worker, then move to
@@ -161,7 +161,7 @@ public class DefaultTaskController<InputT, OutputT> implements TaskController {
      * The controller stays in this state until one of the following events:
      * 
      * <ul>
-     * <li>If the last worker {@link #onWorkerCompletedNormally() completes normally} or
+     * <li>If the last worker {@link #onWorkerCompletedNormally(int) completes normally} or
      * {@link #onWorkerStopped stops}, then move to {@link #CANCELED}.</li>
      * <li>If a worker {@link #onWorkerCompletedExceptionally(int,Throwable) completes
      * exceptionally}, then move to {@link #FAILING}. If it is the last worker, then move to
@@ -191,7 +191,7 @@ public class DefaultTaskController<InputT, OutputT> implements TaskController {
      * The controller stays in this state until one of the following events:
      * 
      * <ul>
-     * <li>The last worker {@link #onWorkerCompletedNormally() normally},
+     * <li>The last worker {@link #onWorkerCompletedNormally(int) normally},
      * {@link #onWorkerCompletedExceptionally(int,Throwable) exceptionally}, or
      * {@link #onWorkerStopped(int) stops}, then move to {@link #FAILED}.</li>
      * </ul>

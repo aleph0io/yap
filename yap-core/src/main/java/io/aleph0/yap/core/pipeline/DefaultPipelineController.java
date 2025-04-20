@@ -68,8 +68,8 @@ public class DefaultPipelineController implements PipelineController {
    */
   public static enum PipelineState {
     /**
-     * The initial state of the pipeline. {@link #onPipelineStart() On task start}, the controller
-     * immediately moves to {@link #RUNNING}.
+     * The initial state of the pipeline. {@link PipelineController#onPipelineStarted() On task
+     * start}, the controller immediately moves to {@link #RUNNING}.
      */
     READY {
       @Override
@@ -93,12 +93,13 @@ public class DefaultPipelineController implements PipelineController {
      * The controller stays in this state until one of the following events:
      * 
      * <ul>
-     * <li>If all tasks are started and subsequently {@link #onTaskCompleted(String) complete}, then
-     * move to {@link #COMPLETED}</li>
-     * <li>If {@link #onCancelRequested() the user requests cancellation}, then move to
-     * {@link #CANCELING}.</li>
-     * <li>If a task {@link #onTaskFailed(int,Throwable) fails}, then move to {@link #FAILING}. If
-     * it is the last task, then move to {@link #FAILED} instead.</li>
+     * <li>If all tasks are started and subsequently
+     * {@link PipelineController#onTaskCompleted(String) complete}, then move to
+     * {@link #COMPLETED}</li>
+     * <li>If {@link PipelineController#onCancelRequested() the user requests cancellation}, then
+     * move to {@link #CANCELING}.</li>
+     * <li>If a task {@link PipelineController#onTaskFailed(String,Throwable) fails}, then move to
+     * {@link #FAILING}. If it is the last task, then move to {@link #FAILED} instead.</li>
      * </ul>
      */
     RUNNING {
@@ -124,10 +125,11 @@ public class DefaultPipelineController implements PipelineController {
      * The controller stays in this state until one of the following events:
      * 
      * <ul>
-     * <li>If the last worker {@link #onTaskCompleted(String) completes} or
-     * {@link #onTaskCanceled(String) cancels}, then move to {@link #CANCELED}.</li>
-     * <li>If a task {@link #onTaskFailed(String,Throwable) fails}, then move to {@link #FAILING}.
-     * If it is the last task, then move to {@link #FAILED} instead.</li>
+     * <li>If the last worker {@link PipelineController#onTaskCompleted(String) completes} or
+     * {@link PipelineController#onTaskCancelled(String) cancels}, then move to
+     * {@link #CANCELED}.</li>
+     * <li>If a task {@link PipelineController#onTaskFailed(String,Throwable) fails}, then move to
+     * {@link #FAILING}. If it is the last task, then move to {@link #FAILED} instead.</li>
      * </ul>
      */
     CANCELING {
@@ -140,8 +142,8 @@ public class DefaultPipelineController implements PipelineController {
     },
 
     /**
-     * One or more tasks have {@link #onTaskFailed(String,Throwable) failed} and the pipeline is in
-     * the process of shutting down. The following conditions must be true:
+     * One or more tasks have {@link PipelineController#onTaskFailed(String,Throwable) failed} and
+     * the pipeline is in the process of shutting down. The following conditions must be true:
      * 
      * <ul>
      * <li>At least one task has failed</li>
@@ -152,9 +154,9 @@ public class DefaultPipelineController implements PipelineController {
      * The controller stays in this state until one of the following events:
      * 
      * <ul>
-     * <li>The last task {@link #onTaskCompleted(String) completes},
-     * {@link #onTaskFailed(String,Throwable) fails}, or {@link #onTaskCanceled(String) cancels},
-     * then move to {@link #FAILED}.</li>
+     * <li>The last task {@link PipelineController#onTaskCompleted(String) completes},
+     * {@link PipelineController#onTaskFailed(String,Throwable) fails}, or
+     * {@link PipelineController#onTaskCancelled(String) cancels}, then move to {@link #FAILED}.</li>
      * </ul>
      */
     FAILING {
