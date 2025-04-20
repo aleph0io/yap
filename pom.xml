@@ -3,7 +3,7 @@
 
     <groupId>io.aleph0</groupId>
     <artifactId>yap</artifactId>
-    <version>0.0.0-b0</version>
+    <version>0.0.0-b1-SNAPSHOT</version>
     <name>yap</name>
     <inceptionYear>2025</inceptionYear>
     <description>yap is a Yet Another Pipeline for Java 21+</description>
