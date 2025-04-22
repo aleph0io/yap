@@ -259,7 +259,13 @@ public class PipelineBuilder {
                 public WorkerBody newWorkerBody() {
                   final ProducerWorker body = producer.workerFactory.newProducerWorker();
                   return () -> {
-                    body.produce(topic::publish);
+                    body.produce(m -> {
+                      if (Thread.interrupted()) {
+                        Thread.currentThread().interrupt();
+                        throw new InterruptedException();
+                      }
+                      topic.publish(m);
+                    });
                   };
                 }
 
@@ -296,14 +302,28 @@ public class PipelineBuilder {
                       @Override
                       public Object take(Duration timeout)
                           throws InterruptedException, TimeoutException {
+                        if (Thread.interrupted()) {
+                          Thread.currentThread().interrupt();
+                          throw new InterruptedException();
+                        }
                         return queue.receive(timeout);
                       }
 
                       @Override
                       public Object take() throws InterruptedException {
+                        if (Thread.interrupted()) {
+                          Thread.currentThread().interrupt();
+                          throw new InterruptedException();
+                        }
                         return queue.receive();
                       }
-                    }, topic::publish);
+                    }, m -> {
+                      if (Thread.interrupted()) {
+                        Thread.currentThread().interrupt();
+                        throw new InterruptedException();
+                      }
+                      topic.publish(m);
+                    });
                   };
                 }
 
@@ -339,11 +359,19 @@ public class PipelineBuilder {
                       @Override
                       public Object take(Duration timeout)
                           throws InterruptedException, TimeoutException {
+                        if (Thread.interrupted()) {
+                          Thread.currentThread().interrupt();
+                          throw new InterruptedException();
+                        }
                         return queue.receive(timeout);
                       }
 
                       @Override
                       public Object take() throws InterruptedException {
+                        if (Thread.interrupted()) {
+                          Thread.currentThread().interrupt();
+                          throw new InterruptedException();
+                        }
                         return queue.receive();
                       }
                     });

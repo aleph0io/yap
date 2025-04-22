@@ -57,15 +57,18 @@ public final class DirectedGraphs {
       for (final String neighbor : graph.getOrDefault(node, Set.of())) {
         if (!visited.contains(neighbor)) {
           visited.add(neighbor);
-          queue.add(neighbor);
+          queue.offer(neighbor);
         }
       }
 
       // Add all neighbors in the reverse direction
       for (final Map.Entry<String, Set<String>> entry : graph.entrySet()) {
-        if (entry.getValue().contains(node) && !visited.contains(entry.getKey())) {
-          visited.add(entry.getKey());
-          queue.add(entry.getKey());
+        if (!entry.getValue().contains(node))
+          continue;
+        final String neighbor = entry.getKey();
+        if (!visited.contains(neighbor)) {
+          visited.add(neighbor);
+          queue.offer(neighbor);
         }
       }
     }
