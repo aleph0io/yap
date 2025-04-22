@@ -52,10 +52,20 @@ public final class DirectedGraphs {
 
     while (!queue.isEmpty()) {
       final String node = queue.poll();
+
+      // Add all neighbors in the original direction
       for (final String neighbor : graph.getOrDefault(node, Set.of())) {
         if (!visited.contains(neighbor)) {
           visited.add(neighbor);
           queue.add(neighbor);
+        }
+      }
+
+      // Add all neighbors in the reverse direction
+      for (final Map.Entry<String, Set<String>> entry : graph.entrySet()) {
+        if (entry.getValue().contains(node) && !visited.contains(entry.getKey())) {
+          visited.add(entry.getKey());
+          queue.add(entry.getKey());
         }
       }
     }
