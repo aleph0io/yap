@@ -58,6 +58,12 @@ public final class ProcessorTaskBuilder<InputT, OutputT, MetricsT> implements Ta
     return this;
   }
 
+  public ProcessorTaskBuilder<InputT, OutputT, MetricsT> setController(
+      ProcessorTaskControllerBuilder<InputT, OutputT> controller) {
+    this.controller = requireNonNull(controller);
+    return this;
+  }
+
   public <NextT> ProcessorTaskBuilder<InputT, OutputT, MetricsT> addSubscriber(
       ProcessorTaskBuilder<OutputT, NextT, ?> subscriber) {
     subscribers.add(subscriber.getId());
