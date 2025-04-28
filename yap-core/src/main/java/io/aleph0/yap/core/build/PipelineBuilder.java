@@ -46,6 +46,7 @@ import io.aleph0.yap.core.task.DefaultConsumerTaskController;
 import io.aleph0.yap.core.task.DefaultProcessorTaskController;
 import io.aleph0.yap.core.task.DefaultProducerTaskController;
 import io.aleph0.yap.core.task.TaskController;
+import io.aleph0.yap.core.task.TaskController.ProcessorTaskControllerBuilder;
 import io.aleph0.yap.core.task.TaskController.ProducerTaskControllerBuilder;
 import io.aleph0.yap.core.task.TaskManager;
 import io.aleph0.yap.core.task.TaskManager.WorkerBody;
@@ -202,7 +203,7 @@ public class PipelineBuilder {
    * @param workerFactory the processor worker factory
    * @return a {@link ProcessorTaskBuilder} to configure the processor task
    * 
-   * @see ProcessorTaskBuilder#setController(TaskControllerBuilder)
+   * @see ProcessorTaskBuilder#setController(ProcessorTaskControllerBuilder)
    * @see DefaultProcessorTaskController#builder()
    */
   public <InputT, OutputT, MetricsT> ProcessorTaskBuilder<InputT, OutputT, MetricsT> addProcessor(
@@ -263,7 +264,7 @@ public class PipelineBuilder {
    * @param <InputT> the type of the consumer's input
    * @param <MetricsT> the type of the consumer's metrics
    * @param id the task ID
-   * @param worker the consumer worker
+   * @param workerFactory the consumer worker factory
    * @return a {@link ConsumerTaskBuilder} to configure the consumer task
    * 
    * @see ConsumerTaskBuilder#setController(TaskControllerBuilder)
