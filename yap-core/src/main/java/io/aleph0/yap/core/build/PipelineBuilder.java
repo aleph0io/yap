@@ -42,7 +42,11 @@ import io.aleph0.yap.core.pipeline.DefaultPipelineController;
 import io.aleph0.yap.core.pipeline.PipelineController;
 import io.aleph0.yap.core.pipeline.PipelineManager;
 import io.aleph0.yap.core.pipeline.PipelineWrapper;
+import io.aleph0.yap.core.task.DefaultConsumerTaskController;
+import io.aleph0.yap.core.task.DefaultProcessorTaskController;
+import io.aleph0.yap.core.task.DefaultProducerTaskController;
 import io.aleph0.yap.core.task.TaskController;
+import io.aleph0.yap.core.task.TaskController.ProducerTaskControllerBuilder;
 import io.aleph0.yap.core.task.TaskManager;
 import io.aleph0.yap.core.task.TaskManager.WorkerBody;
 import io.aleph0.yap.core.transport.Channel;
@@ -52,8 +56,14 @@ import io.aleph0.yap.core.transport.channel.DefaultChannel;
 import io.aleph0.yap.core.util.DirectedGraphs;
 import io.aleph0.yap.core.util.NoMetrics;
 import io.aleph0.yap.core.worker.ConsumerWorkerFactory;
+import io.aleph0.yap.core.worker.MeasuredConsumerWorker;
+import io.aleph0.yap.core.worker.MeasuredProcessorWorker;
+import io.aleph0.yap.core.worker.MeasuredProducerWorker;
 import io.aleph0.yap.core.worker.ProcessorWorkerFactory;
 import io.aleph0.yap.core.worker.ProducerWorkerFactory;
+import io.aleph0.yap.core.worker.SingletonConsumerWorkerFactory;
+import io.aleph0.yap.core.worker.SingletonProcessorWorkerFactory;
+import io.aleph0.yap.core.worker.SingletonProducerWorkerFactory;
 
 public class PipelineBuilder {
   private static final AtomicInteger sequence = new AtomicInteger(1);
@@ -78,28 +88,62 @@ public class PipelineBuilder {
     return this;
   }
 
+  /**
+   * Add a producer task to the pipeline. The producer task will only support a single worker, which
+   * is the given worker. If the {@link TaskController} attempts to scale the task beyond one
+   * worker, then the task will fail with an {@link IllegalStateException}.
+   * 
+   * @param <OutputT> the type of the producer's output
+   * @param id the task ID
+   * @param worker the producer worker
+   * @return a {@link ProducerTaskBuilder} to configure the producer task
+   * 
+   * @see #addProducer(String, MeasuredProducerWorker)
+   */
   public <OutputT> ProducerTaskBuilder<OutputT, NoMetrics> addProducer(String id,
       ProducerWorker<OutputT> worker) {
-    return addProducer(id, new ProducerWorkerFactory<OutputT, NoMetrics>() {
-      @Override
-      public ProducerWorker<OutputT> newProducerWorker() {
-        return worker;
-      }
-
-      @Override
-      public NoMetrics checkMetrics() {
-        return NoMetrics.INSTANCE;
-      }
-
-      @Override
-      public NoMetrics flushMetrics() {
-        return NoMetrics.INSTANCE;
-      }
-    });
+    return addProducer(id, MeasuredProducerWorker.withNoMetrics(worker));
   }
 
+  /**
+   * Add a producer task to the pipeline. The producer task will only support a single worker, which
+   * is the given worker. If the {@link TaskController} attempts to scale the task beyond one
+   * worker, then the task will fail with an {@link IllegalStateException}.
+   * 
+   * @param <OutputT> the type of the producer's output
+   * @param <MetricsT> the type of the producer's metrics
+   * @param id the task ID
+   * @param worker the producer worker
+   * @return a {@link ProducerTaskBuilder} to configure the producer task
+   * 
+   * @see SingletonProducerWorkerFactory
+   */
+  public <OutputT, MetricsT> ProducerTaskBuilder<OutputT, MetricsT> addProducer(String id,
+      MeasuredProducerWorker<OutputT, MetricsT> worker) {
+    if (worker == null)
+      throw new NullPointerException("worker");
+    return addProducer(id, new SingletonProducerWorkerFactory<OutputT, MetricsT>(worker));
+  }
+
+  /**
+   * Add a producer task to the pipeline. The given {@link ProducerWorkerFactory workerFactory} will
+   * be used to create new workers for the task as requested by the {@link TaskController}.
+   * 
+   * @param <OutputT> the type of the producer's output
+   * @param <MetricsT> the type of the producer's metrics
+   * @param id the task ID
+   * @param workerFactory the producer worker factory
+   * @return a {@link ProducerTaskBuilder} to configure the producer task
+   * 
+   * @see ProducerTaskBuilder#setController(ProducerTaskControllerBuilder)
+   * @see DefaultProducerTaskController#builder()
+   */
   public <OutputT, MetricsT> ProducerTaskBuilder<OutputT, MetricsT> addProducer(String id,
       ProducerWorkerFactory<OutputT, MetricsT> workerFactory) {
+    if (id == null)
+      throw new NullPointerException("id");
+    if (workerFactory == null)
+      throw new NullPointerException("workerFactory");
     if (tasks.containsKey(id))
       throw new IllegalArgumentException("Task with id " + id + " already exists");
     final ProducerTaskBuilder<OutputT, MetricsT> result =
@@ -108,28 +152,65 @@ public class PipelineBuilder {
     return result;
   }
 
+  /**
+   * Add a processor task to the pipeline. The processor task will only support a single worker,
+   * which is the given worker. If the {@link TaskController} attempts to scale the task beyond one
+   * worker, then the task will fail with an {@link IllegalStateException}.
+   * 
+   * @param <InputT> the type of the processor's input
+   * @param <OutputT> the type of the processor's output
+   * @param id the task ID
+   * @param worker the processor worker
+   * @return a {@link ProcessorTaskBuilder} to configure the processor task
+   * 
+   * @see #addProcessor(String, MeasuredProcessorWorker)
+   */
   public <InputT, OutputT> ProcessorTaskBuilder<InputT, OutputT, NoMetrics> addProcessor(String id,
-      ProcessorWorker<InputT, OutputT> body) {
-    return addProcessor(id, new ProcessorWorkerFactory<InputT, OutputT, NoMetrics>() {
-      @Override
-      public ProcessorWorker<InputT, OutputT> newProcessorWorker() {
-        return body;
-      }
-
-      @Override
-      public NoMetrics checkMetrics() {
-        return NoMetrics.INSTANCE;
-      }
-
-      @Override
-      public NoMetrics flushMetrics() {
-        return NoMetrics.INSTANCE;
-      }
-    });
+      ProcessorWorker<InputT, OutputT> worker) {
+    return addProcessor(id, MeasuredProcessorWorker.withNoMetrics(worker));
   }
 
+  /**
+   * Add a processor task to the pipeline. The processor task will only support a single worker,
+   * which is the given worker. If the {@link TaskController} attempts to scale the task beyond one
+   * worker, then the task will fail with an {@link IllegalStateException}.
+   * 
+   * @param <InputT> the type of the processor's input
+   * @param <OutputT> the type of the processor's output
+   * @param <MetricsT> the type of the processor's metrics
+   * @param id the task ID
+   * @param worker the processor worker
+   * @return a {@link ProcessorTaskBuilder} to configure the processor task
+   * 
+   * @see SingletonProcessorWorkerFactory
+   */
+  public <InputT, OutputT, MetricsT> ProcessorTaskBuilder<InputT, OutputT, MetricsT> addProcessor(
+      String id, MeasuredProcessorWorker<InputT, OutputT, MetricsT> worker) {
+    if (worker == null)
+      throw new NullPointerException("worker");
+    return addProcessor(id, new SingletonProcessorWorkerFactory<InputT, OutputT, MetricsT>(worker));
+  }
+
+  /**
+   * Add a processor task to the pipeline. The given {@link ProcessorWorkerFactory workerFactory}
+   * will be used to create new workers for the task as requested by the {@link TaskController}.
+   * 
+   * @param <InputT> the type of the processor's input
+   * @param <OutputT> the type of the processor's output
+   * @param <MetricsT> the type of the processor's metrics
+   * @param id the task ID
+   * @param workerFactory the processor worker factory
+   * @return a {@link ProcessorTaskBuilder} to configure the processor task
+   * 
+   * @see ProcessorTaskBuilder#setController(TaskControllerBuilder)
+   * @see DefaultProcessorTaskController#builder()
+   */
   public <InputT, OutputT, MetricsT> ProcessorTaskBuilder<InputT, OutputT, MetricsT> addProcessor(
       String id, ProcessorWorkerFactory<InputT, OutputT, MetricsT> workerFactory) {
+    if (id == null)
+      throw new NullPointerException("id");
+    if (workerFactory == null)
+      throw new NullPointerException("workerFactory");
     if (tasks.containsKey(id))
       throw new IllegalArgumentException("Task with id " + id + " already exists");
     final ProcessorTaskBuilder<InputT, OutputT, MetricsT> result =
@@ -138,31 +219,66 @@ public class PipelineBuilder {
     return result;
   }
 
+  /**
+   * Add a consumer task to the pipeline. The consumer task will only support a single worker, which
+   * is the given worker. If the {@link TaskController} attempts to scale the task beyond one
+   * worker, then the task will fail with an {@link IllegalStateException}.
+   * 
+   * @param <InputT> the type of the consumer's input
+   * @param id the task ID
+   * @param worker the consumer worker
+   * @return a {@link ConsumerTaskBuilder} to configure the consumer task
+   * 
+   * @see #addConsumer(String, MeasuredConsumerWorker)
+   */
   public <InputT> ConsumerTaskBuilder<InputT, NoMetrics> addConsumer(String id,
-      ConsumerWorker<InputT> body) {
-    return addConsumer(id, new ConsumerWorkerFactory<InputT, NoMetrics>() {
-      @Override
-      public ConsumerWorker<InputT> newConsumerWorker() {
-        return body;
-      }
-
-      @Override
-      public NoMetrics checkMetrics() {
-        return NoMetrics.INSTANCE;
-      }
-
-      @Override
-      public NoMetrics flushMetrics() {
-        return NoMetrics.INSTANCE;
-      }
-    });
+      ConsumerWorker<InputT> worker) {
+    return addConsumer(id, MeasuredConsumerWorker.withNoMetrics(worker));
   }
 
+  /**
+   * Add a consumer task to the pipeline. The consumer task will only support a single worker, which
+   * is the given worker. If the {@link TaskController} attempts to scale the task beyond one
+   * worker, then the task will fail with an {@link IllegalStateException}.
+   * 
+   * @param <InputT> the type of the consumer's input
+   * @param <MetricsT> the type of the consumer's metrics
+   * @param id the task ID
+   * @param worker the consumer worker
+   * @return a {@link ConsumerTaskBuilder} to configure the consumer task
+   * 
+   * @see SingletonConsumerWorkerFactory
+   */
   public <InputT, MetricsT> ConsumerTaskBuilder<InputT, MetricsT> addConsumer(String id,
-      ConsumerWorkerFactory<InputT, MetricsT> bodyFactory) {
+      MeasuredConsumerWorker<InputT, MetricsT> worker) {
+    if (worker == null)
+      throw new NullPointerException("worker");
+    return addConsumer(id, new SingletonConsumerWorkerFactory<InputT, MetricsT>(worker));
+  }
+
+  /**
+   * Add a consumer task to the pipeline. The given {@link ConsumerWorkerFactory workerFactory} will
+   * be used to create new workers for the task as requested by the {@link TaskController}.
+   * 
+   * @param <InputT> the type of the consumer's input
+   * @param <MetricsT> the type of the consumer's metrics
+   * @param id the task ID
+   * @param worker the consumer worker
+   * @return a {@link ConsumerTaskBuilder} to configure the consumer task
+   * 
+   * @see ConsumerTaskBuilder#setController(TaskControllerBuilder)
+   * @see DefaultConsumerTaskController#builder()
+   */
+  public <InputT, MetricsT> ConsumerTaskBuilder<InputT, MetricsT> addConsumer(String id,
+      ConsumerWorkerFactory<InputT, MetricsT> workerFactory) {
+    if (id == null)
+      throw new NullPointerException("id");
+    if (workerFactory == null)
+      throw new NullPointerException("workerFactory");
     if (tasks.containsKey(id))
       throw new IllegalArgumentException("Task with id " + id + " already exists");
-    final ConsumerTaskBuilder<InputT, MetricsT> result = new ConsumerTaskBuilder<>(id, bodyFactory);
+    final ConsumerTaskBuilder<InputT, MetricsT> result =
+        new ConsumerTaskBuilder<>(id, workerFactory);
     tasks.put(id, result);
     return result;
   }
@@ -289,6 +405,7 @@ public class PipelineBuilder {
           final TaskController controller = processor.controller.build(queue, topic);
           final TaskManager.WorkerBodyFactory<?> workerBodyFactory =
               new io.aleph0.yap.core.task.TaskManager.WorkerBodyFactory<>() {
+
                 @Override
                 public WorkerBody newWorkerBody() {
                   final ProcessorWorker body = processor.workerFactory.newProcessorWorker();
@@ -341,7 +458,9 @@ public class PipelineBuilder {
               workerBodyFactory, queue, topic);
           break;
         }
-        case ConsumerTaskBuilder<?, ?> consumer: {
+        case
+
+            ConsumerTaskBuilder<?, ?> consumer: {
           final Queue queue = queues.get(id);
           final TaskController controller = consumer.controller.build(queue);
           final TaskManager.WorkerBodyFactory<?> workerBodyFactory =

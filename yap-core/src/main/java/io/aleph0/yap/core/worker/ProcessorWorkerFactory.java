@@ -20,8 +20,14 @@
 package io.aleph0.yap.core.worker;
 
 import io.aleph0.yap.core.Measureable;
-import io.aleph0.yap.core.ProcessorWorker;
 
 public interface ProcessorWorkerFactory<InputT, OutputT, MetricsT> extends Measureable<MetricsT> {
-  public ProcessorWorker<InputT, OutputT> newProcessorWorker();
+  /**
+   * Creates a new {@link MeasuredProcessorWorker worker}
+   * 
+   * @return the new worker
+   * 
+   * @throws IllegalStateException if the factory is not in a state to create a new worker
+   */
+  public MeasuredProcessorWorker<InputT, OutputT, MetricsT> newProcessorWorker();
 }

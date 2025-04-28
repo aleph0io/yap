@@ -20,7 +20,15 @@
 package io.aleph0.yap.core;
 
 import io.aleph0.yap.core.task.TaskController;
+import io.aleph0.yap.core.util.NoMetrics;
 
+/**
+ * An object that can produce metrics.
+ * 
+ * @param <M> the type of the metrics
+ * 
+ * @see NoMetrics
+ */
 public interface Measureable<M> {
   /**
    * Non-destructive check of the metrics. This should be used to check the state of metrics without
@@ -33,7 +41,7 @@ public interface Measureable<M> {
   /**
    * Destructive read of the metrics. This should be used to check and reset the state of metrics,
    * for example by the metrics checking thread.
-   *  
+   * 
    * @return the metrics
    */
   public M flushMetrics();

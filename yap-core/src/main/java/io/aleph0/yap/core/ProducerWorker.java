@@ -19,6 +19,18 @@
  */
 package io.aleph0.yap.core;
 
+import io.aleph0.yap.core.worker.MeasuredProducerWorker;
+
+/**
+ * A worker that produces outputs via a {@link Sink sink}.
+ * 
+ * <p>
+ * This worker is not {@link Measureable measured}, which is to say it does not produce any metrics.
+ * 
+ * @param <OutputT> the type of the output
+ * 
+ * @see MeasuredProducerWorker
+ */
 @FunctionalInterface
 public interface ProducerWorker<OutputT> {
   public void produce(Sink<OutputT> sink) throws Exception;

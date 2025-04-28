@@ -19,6 +19,20 @@
  */
 package io.aleph0.yap.core;
 
+import io.aleph0.yap.core.worker.MeasuredProcessorWorker;
+
+/**
+ * A worker that takes inputs via a {@link Source source} and produces outputs via a {@link Sink
+ * sink}.
+ * 
+ * <p>
+ * This worker is not {@link Measureable measured}, which is to say it does not produce any metrics.
+ * 
+ * @param <InputT> the type of the input
+ * @param <OutputT> the type of the output
+ * 
+ * @see MeasuredProcessorWorker
+ */
 @FunctionalInterface
 public interface ProcessorWorker<InputT, OutputT> {
   public void process(Source<InputT> source, Sink<OutputT> sink) throws Exception;

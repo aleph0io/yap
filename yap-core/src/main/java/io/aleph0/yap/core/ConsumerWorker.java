@@ -19,6 +19,14 @@
  */
 package io.aleph0.yap.core;
 
+/**
+ * A worker that consumes inputs via a {@link Source source}.
+ * 
+ * <p>
+ * This worker is not {@link Measureable measured}, which is to say it does not produce any metrics.
+ * 
+ * @param <InputT> the type of the input
+ */
 @FunctionalInterface
 public interface ConsumerWorker<InputT> {
   public void consume(Source<InputT> source) throws Exception;
