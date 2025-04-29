@@ -34,6 +34,11 @@ import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.websocket.api.Callback;
 import org.eclipse.jetty.websocket.api.Session;
 import org.eclipse.jetty.websocket.api.StatusCode;
+import org.eclipse.jetty.websocket.api.annotations.OnWebSocketClose;
+import org.eclipse.jetty.websocket.api.annotations.OnWebSocketError;
+import org.eclipse.jetty.websocket.api.annotations.OnWebSocketMessage;
+import org.eclipse.jetty.websocket.api.annotations.OnWebSocketOpen;
+import org.eclipse.jetty.websocket.api.annotations.WebSocket;
 import org.eclipse.jetty.websocket.client.ClientUpgradeRequest;
 import org.eclipse.jetty.websocket.client.WebSocketClient;
 import org.slf4j.Logger;
@@ -122,74 +127,8 @@ public class WebSocketFirehoseProducer implements FirehoseProducerWorker<Message
         configurator.configureClientUpgradeRequest(request);
 
         final CountDownLatch latch = new CountDownLatch(1);
-        websocket.connect(new Session.Listener() {
-          private Session session;
 
-          public void onWebSocketOpen(Session s) {
-            LOGGER.atInfo().log("WebSocket connected");
-            this.session = s;
-            configurator.configureSession(session);
-          }
-
-          @Override
-          public void onWebSocketText(String text) {
-            final List<Message> messages;
-            try {
-              messages = messageFactory.newTextMessages(text);
-            } catch (Exception e) {
-              LOGGER.atError().setCause(e).log("Failed to create text messages");
-              failureCauses.offer(e);
-              session.close(StatusCode.SERVER_ERROR, null, Callback.NOOP);
-              return;
-            }
-
-            putMessages(messages);
-          }
-
-          @Override
-          public void onWebSocketBinary(ByteBuffer payload, Callback callback) {
-            final List<Message> messages;
-            try {
-              messages = messageFactory.newBinaryMessages(payload);
-            } catch (Exception e) {
-              LOGGER.atError().setCause(e).log("Failed to create binary messages");
-              failureCauses.offer(e);
-              session.close(StatusCode.SERVER_ERROR, null, Callback.NOOP);
-              return;
-            }
-
-            putMessages(messages);
-          }
-
-          private void putMessages(List<Message> messages) {
-            try {
-              for (Message message : messages) {
-                sink.put(message);
-                receivedMetric.incrementAndGet();
-              }
-            } catch (InterruptedException e) {
-              Thread.currentThread().interrupt();
-              LOGGER.atError().setCause(e).log("Failed to produce event");
-              failureCauses.offer(e);
-              session.close(StatusCode.NORMAL, null, Callback.NOOP);
-            }
-          }
-
-          @Override
-          public void onWebSocketError(Throwable cause) {
-            LOGGER.atError().setCause(cause).log("WebSocket error");
-            failureCauses.offer(cause);
-            latch.countDown();
-          }
-
-          @Override
-          public void onWebSocketClose(int statusCode, String reason) {
-            LOGGER.atInfo().addKeyValue("statusCode", statusCode).addKeyValue("reason", reason)
-                .log("WebSocket closed");
-            failureCauses.offer(new NormalCloseException());
-            latch.countDown();
-          }
-        }, uri, request);
+        websocket.connect(new InternalSocketListener(sink, failureCauses, latch), uri, request);
 
         latch.await();
 
@@ -215,12 +154,12 @@ public class WebSocketFirehoseProducer implements FirehoseProducerWorker<Message
         throw new AssertionError("Unexpected error", failureCause);
       }
     } catch (InterruptedException e) {
-      LOGGER.atError().setCause(e).log("Jetstream session interrupted");
+      LOGGER.atError().setCause(e).log("Websocket session interrupted");
       Thread.currentThread().interrupt();
       throw new InterruptedException();
     } catch (ExecutionException e) {
       final Throwable cause = e.getCause();
-      LOGGER.atError().setCause(cause).log("Jetstream session failed");
+      LOGGER.atError().setCause(cause).log("Websocket session failed");
       if (cause instanceof IOException)
         throw (IOException) cause;
       if (cause instanceof RuntimeException)
@@ -228,6 +167,106 @@ public class WebSocketFirehoseProducer implements FirehoseProducerWorker<Message
       if (cause instanceof Error)
         throw (Error) cause;
       throw new IOException("Jetstream session failed", cause);
+    }
+  }
+
+  /**
+   * This class has to be public so Jetty can see it. It is not intended to be used outside of this
+   * package.
+   * 
+   * <p>
+   * We let Jetty manage all the complexity of demand, hence the {@code autoDemand = true}.
+   */
+  @WebSocket(autoDemand = true)
+  public class InternalSocketListener {
+    private final Sink<Message> sink;
+    private final BlockingQueue<Throwable> failureCauses;
+    private final CountDownLatch latch;
+
+    public InternalSocketListener(Sink<Message> sink, BlockingQueue<Throwable> failureCauses,
+        CountDownLatch latch) {
+      this.sink = requireNonNull(sink, "sink");
+      this.failureCauses = requireNonNull(failureCauses, "failureCauses");
+      this.latch = requireNonNull(latch, "latch");
+    }
+
+    @OnWebSocketOpen
+    public void onWebSocketOpen(Session session) {
+      LOGGER.atInfo().log("WebSocket connected");
+      configurator.configureSession(session);
+    }
+
+    @OnWebSocketMessage
+    public void onWebSocketText(Session session, String text) {
+      final List<Message> messages;
+      try {
+        messages = messageFactory.newTextMessages(text);
+      } catch (Exception e) {
+        LOGGER.atError().setCause(e).log("Failed to create text messages");
+        failureCauses.offer(e);
+        session.close(StatusCode.SERVER_ERROR, null, Callback.NOOP);
+        return;
+      }
+
+      putMessages(session, messages);
+    }
+
+    @OnWebSocketMessage
+    public void onWebSocketBinary(Session session, ByteBuffer payload, Callback callback) {
+      final List<Message> messages;
+      try {
+        messages = messageFactory.newBinaryMessages(payload);
+      } catch (Exception e) {
+        LOGGER.atError().setCause(e).log("Failed to create binary messages");
+        failureCauses.offer(e);
+        session.close(StatusCode.SERVER_ERROR, null, Callback.NOOP);
+        return;
+      }
+
+      putMessages(session, messages);
+
+      callback.succeed();
+    }
+
+    private void putMessages(Session session, List<Message> messages) {
+      try {
+        for (Message message : messages) {
+          sink.put(message);
+          receivedMetric.incrementAndGet();
+        }
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        LOGGER.atInfo().setCause(e).log("Interrupted while putting messages");
+        failureCauses.offer(e);
+        session.close(StatusCode.NORMAL, null, Callback.NOOP);
+      }
+    }
+
+    @OnWebSocketError
+    public void onWebSocketError(Session session, Throwable cause) {
+      LOGGER.atError().setCause(cause).log("WebSocket error");
+      failureCauses.offer(cause);
+      latch.countDown();
+      session.disconnect();
+    }
+
+    @OnWebSocketClose
+    public void onWebSocketClose(Session session, int statusCode, String reason) {
+      // NOTE: We do not need to send a close frame here, since Jetty will do that for us.
+      // At this point, the protocol gods have been appeased, and we just need to close the
+      // session and clean up.
+      LOGGER.atInfo().addKeyValue("statusCode", statusCode).addKeyValue("reason", reason)
+          .log("WebSocket closed");
+
+      final Exception failureCause;
+      if (statusCode == StatusCode.NORMAL)
+        failureCause = new NormalCloseException();
+      else
+        failureCause = new IOException("WebSocket closed with status code " + statusCode);
+
+      failureCauses.offer(failureCause);
+
+      latch.countDown();
     }
   }
 
