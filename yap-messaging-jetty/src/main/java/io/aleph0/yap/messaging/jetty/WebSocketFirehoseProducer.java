@@ -154,12 +154,12 @@ public class WebSocketFirehoseProducer implements FirehoseProducerWorker<Message
         throw new AssertionError("Unexpected error", failureCause);
       }
     } catch (InterruptedException e) {
-      LOGGER.atError().setCause(e).log("Websocket session interrupted");
+      LOGGER.atError().setCause(e).log("Websocket session interrupted. Propagating...");
       Thread.currentThread().interrupt();
       throw new InterruptedException();
     } catch (ExecutionException e) {
       final Throwable cause = e.getCause();
-      LOGGER.atError().setCause(cause).log("Websocket session failed");
+      LOGGER.atError().setCause(cause).log("Websocket session failed. Failing task...");
       if (cause instanceof IOException)
         throw (IOException) cause;
       if (cause instanceof RuntimeException)

@@ -164,14 +164,14 @@ public class PubsubRelayProcessorWorker<ValueT> implements RelayProcessorWorker<
     } catch (InterruptedException e) {
       // Propagate the interruption
       Thread.currentThread().interrupt();
-      LOGGER.atWarn().setCause(e).log("Interrupted. Failing task...");
+      LOGGER.atWarn().setCause(e).log("Pubsub relay interrupted. Propagating...");
       throw e;
     } catch (RuntimeException e) {
-      LOGGER.atError().setCause(e).log("Pubsub firehose failed. Failing task...");
+      LOGGER.atError().setCause(e).log("Pubsub relay failed. Failing task...");
       throw e;
     } catch (ExecutionException e) {
       final Throwable cause = e.getCause();
-      LOGGER.atError().setCause(cause).log("Pubsub firehose failed. Failing task...");
+      LOGGER.atError().setCause(cause).log("Pubsub relay failed. Failing task...");
       if (cause instanceof Error x)
         throw x;
       if (cause instanceof IOException x)
@@ -179,7 +179,7 @@ public class PubsubRelayProcessorWorker<ValueT> implements RelayProcessorWorker<
       if (cause instanceof RuntimeException x)
         throw x;
       if (cause instanceof Exception x)
-        throw new IOException("Pubsub firehose failed", x);
+        throw new IOException("Pubsub relay failed", x);
       throw new AssertionError("Unexpected error", e);
     }
   }

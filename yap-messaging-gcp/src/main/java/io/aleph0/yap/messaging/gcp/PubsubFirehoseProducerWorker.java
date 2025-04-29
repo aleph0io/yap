@@ -31,6 +31,7 @@ import org.slf4j.LoggerFactory;
 import com.google.api.core.ApiFuture;
 import com.google.api.core.ApiFutureCallback;
 import com.google.api.core.ApiFutures;
+import com.google.api.core.ApiService.State;
 import com.google.cloud.pubsub.v1.AckReplyConsumerWithResponse;
 import com.google.cloud.pubsub.v1.AckResponse;
 import com.google.cloud.pubsub.v1.MessageReceiverWithAckResponse;
@@ -166,7 +167,7 @@ public class PubsubFirehoseProducerWorker implements FirehoseProducerWorker<Mess
   @Override
   public void produce(Sink<Message> sink) throws IOException, InterruptedException {
     try {
-      final BlockingQueue<Throwable> failureCause = new ArrayBlockingQueue<>(1);
+      final BlockingQueue<Throwable> failureCauses = new ArrayBlockingQueue<>(1);
 
       final Subscriber subscriber =
           subscriberFactory.newSubscriber(new MessageReceiverWithAckResponse() {
@@ -180,19 +181,29 @@ public class PubsubFirehoseProducerWorker implements FirehoseProducerWorker<Mess
                 Thread.currentThread().interrupt();
                 LOGGER.atWarn().setCause(e)
                     .log("Interrupted while trying to put message. Stopping...");
-                failureCause.offer(e);
+                failureCauses.offer(e);
               } catch (Throwable e) {
                 LOGGER.atError().setCause(e).log("Failed to put message. Stopping...");
-                failureCause.offer(e);
+                failureCauses.offer(e);
               }
             }
           });
 
       subscriber.addListener(new Subscriber.Listener() {
         @Override
+        public void stopping(State from) {
+          LOGGER.atDebug().addKeyValue("from", from).log("Subscriber stopping");
+        }
+
+        @Override
+        public void terminated(State from) {
+          LOGGER.atDebug().addKeyValue("from", from).log("Subscriber terminated");
+        }
+
+        @Override
         public void failed(Subscriber.State from, Throwable failure) {
-          LOGGER.atError().setCause(failure).log("Subscriber failed");
-          failureCause.offer(failure);
+          LOGGER.atError().setCause(failure).addKeyValue("from", from).log("Subscriber failed");
+          failureCauses.offer(failure);
         }
       }, MoreExecutors.directExecutor());
 
@@ -203,25 +214,34 @@ public class PubsubFirehoseProducerWorker implements FirehoseProducerWorker<Mess
 
         LOGGER.atInfo().log("Subscriber connected");
 
-        Throwable fc = failureCause.take();
-        if (fc instanceof Error e)
+        Throwable failureCause;
+        try {
+          failureCause = failureCauses.take();
+        } finally {
+          LOGGER.atInfo().log("Subscriber finally");
+        }
+        if (failureCause instanceof Error e)
           throw e;
-        if (fc instanceof InterruptedException e)
+        if (failureCause instanceof InterruptedException e)
           throw e;
-        if (fc instanceof Exception e)
+        if (failureCause instanceof Exception e)
           throw new ExecutionException(e);
-        throw new AssertionError("Unexpected error", fc);
+        throw new AssertionError("Unexpected error", failureCause);
       } finally {
         try {
+          LOGGER.atInfo().log("Stopping subscriber");
           subscriber.stopAsync().awaitTerminated();
+          LOGGER.atInfo().log("Subscriber stopped");
         } catch (IllegalStateException e) {
           LOGGER.atWarn().setCause(e).log("Subscriber was already stopped. Ignoring...");
+        } finally {
+          LOGGER.atInfo().log("Subscriber finally2");
         }
         if (Thread.currentThread().isInterrupted())
           throw new InterruptedException();
       }
     } catch (InterruptedException e) {
-      LOGGER.atError().setCause(e).log("Pubsub firehose interrupted. Failing task...");
+      LOGGER.atError().setCause(e).log("Pubsub firehose interrupted. Propagating...");
       Thread.currentThread().interrupt();
       throw new InterruptedException();
     } catch (RuntimeException e) {
