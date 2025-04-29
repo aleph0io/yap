@@ -21,6 +21,6 @@ package io.aleph0.yap.messaging.core;
 
 import io.aleph0.yap.core.worker.MeasuredProducerWorker;
 
-public interface FirehoseProducerWorker<OutputT>
+public interface FirehoseProducerWorker<OutputT extends Acknowledgeable>
     extends MeasuredProducerWorker<OutputT, FirehoseMetrics> {
 }

@@ -22,6 +22,7 @@ package io.aleph0.yap.messaging.gcp;
 import static java.util.Objects.requireNonNull;
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Phaser;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -49,7 +50,7 @@ import io.aleph0.yap.messaging.core.RelayProcessorWorker;
  * message. If message delivery failure is tolerable, then they can use a custom
  * {@link TaskController} for this task to allow for worker retry.
  */
-public class PubsubRelayProcessorWorker<T> implements RelayProcessorWorker<T, T> {
+public class PubsubRelayProcessorWorker<ValueT> implements RelayProcessorWorker<ValueT> {
   private static final Logger LOGGER = LoggerFactory.getLogger(PubsubRelayProcessorWorker.class);
 
   /**
@@ -89,21 +90,22 @@ public class PubsubRelayProcessorWorker<T> implements RelayProcessorWorker<T, T>
    */
   private final PublisherFactory publisherFactory;
 
-  private final MessageExtractor<T> messageExtractor;
+  private final MessageExtractor<ValueT> messageExtractor;
 
   public PubsubRelayProcessorWorker(PublisherFactory publisherFactory,
-      MessageExtractor<T> messageExtractor) {
+      MessageExtractor<ValueT> messageExtractor) {
     this.publisherFactory = requireNonNull(publisherFactory, "publisherFactory");
     this.messageExtractor = requireNonNull(messageExtractor, "messageExtractor");
   }
 
   @Override
-  public void process(Source<T> source, Sink<T> sink) throws IOException, InterruptedException {
+  public void process(Source<ValueT> source, Sink<ValueT> sink)
+      throws IOException, InterruptedException {
     try {
       final Publisher publisher = publisherFactory.newPublisher();
       try {
-        final AtomicReference<Exception> failureCause = new AtomicReference<>(null);
-        for (T input = source.take(); input != null; input = source.take()) {
+        final AtomicReference<Throwable> failureCause = new AtomicReference<>(null);
+        for (ValueT input = source.take(); input != null; input = source.take()) {
           final List<PubsubMessage> messages = messageExtractor.extractMessages(input);
           for (PubsubMessage message : messages) {
             // Throw the failure cause if we have one
@@ -116,7 +118,7 @@ public class PubsubRelayProcessorWorker<T> implements RelayProcessorWorker<T, T>
 
             phaser.register();
 
-            final T theinput = input;
+            final ValueT theinput = input;
             ApiFutures.addCallback(future, new ApiFutureCallback<String>() {
               @Override
               public void onSuccess(String result) {
@@ -126,9 +128,14 @@ public class PubsubRelayProcessorWorker<T> implements RelayProcessorWorker<T, T>
                   phaser.arriveAndDeregister();
 
                   sink.put(theinput);
-                } catch (Exception e) {
+                } catch (InterruptedException e) {
+                  Thread.currentThread().interrupt();
+                  LOGGER.atWarn().addKeyValue("message", e.getMessage()).setCause(e)
+                      .log("Interrupted while trying to put published message. Failing task...");
+                  failureCause.compareAndSet(null, e);
+                } catch (Throwable e) {
                   LOGGER.atError().addKeyValue("message", e.getMessage()).setCause(e)
-                      .log("Failed to send acked state downstream. Failing task...");
+                      .log("Failed to put published message. Failing task...");
                   failureCause.compareAndSet(null, e);
                 }
               }
@@ -136,10 +143,9 @@ public class PubsubRelayProcessorWorker<T> implements RelayProcessorWorker<T, T>
               @Override
               public void onFailure(Throwable t) {
                 LOGGER.atError().addKeyValue("message", t.getMessage()).setCause(t)
-                    .log("Message failed to publish. Interrupting event thread...");
+                    .log("Message failed to publish. Failing task...");
 
-                failureCause.compareAndSet(null, t instanceof Exception ? (Exception) t
-                    : new Exception("Message failed to publish", t));
+                failureCause.compareAndSet(null, t);
 
                 acknowledgedMetric.incrementAndGet();
 
@@ -158,21 +164,38 @@ public class PubsubRelayProcessorWorker<T> implements RelayProcessorWorker<T, T>
     } catch (InterruptedException e) {
       // Propagate the interruption
       Thread.currentThread().interrupt();
+      LOGGER.atWarn().setCause(e).log("Interrupted. Failing task...");
       throw e;
-    } catch (Exception e) {
-      LOGGER.atError().setCause(e).log("Error during message processing. Exiting...");
-      if (e instanceof IOException x)
+    } catch (RuntimeException e) {
+      LOGGER.atError().setCause(e).log("Pubsub firehose failed. Failing task...");
+      throw e;
+    } catch (ExecutionException e) {
+      final Throwable cause = e.getCause();
+      LOGGER.atError().setCause(cause).log("Pubsub firehose failed. Failing task...");
+      if (cause instanceof Error x)
         throw x;
-      if (e instanceof RuntimeException x)
+      if (cause instanceof IOException x)
         throw x;
-      throw new IOException("Error during message processing", e);
+      if (cause instanceof RuntimeException x)
+        throw x;
+      if (cause instanceof Exception x)
+        throw new IOException("Pubsub firehose failed", x);
+      throw new AssertionError("Unexpected error", e);
     }
   }
 
-  private <E extends Exception> void throwIfPresent(AtomicReference<E> failure) throws E {
-    final E fc = failure.getAndSet(null);
-    if (fc != null)
-      throw fc;
+  private void throwIfPresent(AtomicReference<Throwable> failureCause)
+      throws InterruptedException, ExecutionException {
+    Throwable fc = failureCause.get();
+    if (fc != null) {
+      if (fc instanceof Error e)
+        throw e;
+      if (fc instanceof InterruptedException e)
+        throw e;
+      if (fc instanceof Exception e)
+        throw new ExecutionException(e);
+      throw new AssertionError("Unexpected error", fc);
+    }
   }
 
   public RelayMetrics checkMetrics() {

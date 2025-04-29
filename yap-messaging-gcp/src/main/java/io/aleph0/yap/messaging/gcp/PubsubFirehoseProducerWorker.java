@@ -178,7 +178,11 @@ public class PubsubFirehoseProducerWorker implements FirehoseProducerWorker<Mess
                 receivedMetric.incrementAndGet();
               } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                LOGGER.atWarn().setCause(e).log("Subscriber interrupted. Stopping...");
+                LOGGER.atWarn().setCause(e)
+                    .log("Interrupted while trying to put message. Stopping...");
+                failureCause.offer(e);
+              } catch (Throwable e) {
+                LOGGER.atError().setCause(e).log("Failed to put message. Stopping...");
                 failureCause.offer(e);
               }
             }
@@ -217,18 +221,23 @@ public class PubsubFirehoseProducerWorker implements FirehoseProducerWorker<Mess
           throw new InterruptedException();
       }
     } catch (InterruptedException e) {
-      LOGGER.atError().setCause(e).log("Subscriber interrupted");
+      LOGGER.atError().setCause(e).log("Pubsub firehose interrupted. Failing task...");
       Thread.currentThread().interrupt();
       throw new InterruptedException();
+    } catch (RuntimeException e) {
+      LOGGER.atError().setCause(e).log("Pubsub firehose failed. Failing task...");
+      throw e;
     } catch (ExecutionException e) {
       final Throwable cause = e.getCause();
-      LOGGER.atError().setCause(cause).log("Subscriber failed");
+      LOGGER.atError().setCause(cause).log("Pubsub firehose failed. Failing task...");
       if (cause instanceof Error x)
         throw x;
       if (cause instanceof IOException x)
         throw x;
       if (cause instanceof RuntimeException x)
         throw x;
+      if (cause instanceof Exception x)
+        throw new IOException("Pubsub firehose failed", x);
       throw new AssertionError("Unexpected error", e);
     }
   }
