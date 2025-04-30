@@ -49,6 +49,14 @@ import io.aleph0.yap.messaging.core.RelayProcessorWorker;
  * To ensure message delivery, this worker fails immediately if the publisher fails to publish a
  * message. If message delivery failure is tolerable, then they can use a custom
  * {@link TaskController} for this task to allow for worker retry.
+ * 
+ * <p>
+ * On interrupt, the worker will stop receiving messages immediately.
+ * 
+ * <p>
+ * In all cases, the worker will wait for all outstanding messages to be published before stopping
+ * or failing the task.
+ * 
  */
 public class PubsubRelayProcessorWorker<ValueT> implements RelayProcessorWorker<ValueT> {
   private static final Logger LOGGER = LoggerFactory.getLogger(PubsubRelayProcessorWorker.class);
@@ -156,9 +164,8 @@ public class PubsubRelayProcessorWorker<ValueT> implements RelayProcessorWorker<
         }
 
         throwIfPresent(failureCause);
-
-        phaser.arriveAndAwaitAdvance();
       } finally {
+        phaser.arriveAndAwaitAdvance();
         publisher.shutdown();
       }
     } catch (InterruptedException e) {
