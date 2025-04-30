@@ -21,10 +21,15 @@ package io.aleph0.yap.messaging.gcp;
 
 import static java.util.Objects.requireNonNull;
 import java.io.IOException;
+import java.util.Collections;
+import java.util.Iterator;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,6 +45,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 import com.google.pubsub.v1.PubsubMessage;
 import io.aleph0.yap.core.Sink;
 import io.aleph0.yap.messaging.core.Acknowledgeable;
+import io.aleph0.yap.messaging.core.Acknowledgeable.AcknowledgementListener;
 import io.aleph0.yap.messaging.core.FirehoseMetrics;
 import io.aleph0.yap.messaging.core.FirehoseProducerWorker;
 import io.aleph0.yap.messaging.core.Message;
@@ -51,12 +57,35 @@ import io.aleph0.yap.messaging.core.Message;
  * messages.
  * 
  * <p>
- * In cases of worker or pipeline failure, any attempts to acknowledge or negatively acknowledge a
- * message from this worker in downstream tasks may fail. As such, users should be careful not to
- * mark messages as acknowledged or negatively acknowledged in downstream tasks. As a result, users
- * should be careful not to mark messages as acknowledged or negatively acknowledged until the
- * listener {@link Acknowledgeable.AcknowledgementListener#onSuccess() confirms} it was acknowledged
- * or negatively acknowledged successfully.
+ * On sink failure, the worker will stop the internal PubSub subscriber and fail the task. All
+ * outstanding messages are nacked automatically.
+ * 
+ * <p>
+ * On subscriber failure, the worker will stop the internal PubSub subscriber and fail the task. All
+ * outstanding messages are nacked automatically.
+ * 
+ * <p>
+ * On interrupt, the worker will stop the internal PubSub subscriber and propagate the interrupt.
+ * All outstanding messages are nacked automatically.
+ * 
+ * <p>
+ * Users should be careful not to mark messages as acknowledged or negatively acknowledged until the
+ * listener confirms the operation either {@link Acknowledgeable.AcknowledgementListener#onSuccess()
+ * succeeded} or {@link Acknowledgeable.AcknowledgementListener failed}.
+ * 
+ * <p>
+ * In cases of worker or pipeline failure, this worker will nack all outstanding messages
+ * automatically. (Note that this behavior is forced by some design choices Google made about the
+ * Java PubSub client implementation, as opposed to a conscious design decision on the part of this
+ * library.) As a result, some attempts to acknowledge or negatively acknowledge a message from this
+ * worker in downstream tasks during pipeline failure may fail with an
+ * {@link IllegalStateException}, indicating that the message had previously been acked (when trying
+ * to nack) or nacked (when trying to ack).
+ * 
+ * <p>
+ * This worker treats state and nacking as idempotent operations. So if a message is acked once,
+ * then subsequent attempts to ack the message will receive the same result without actually
+ * performing the ack operation again. The same is true for nacking.
  * 
  * <p>
  * This worker does not fail on acknowledgement or negative acknowledgement failure. Instead, it
@@ -99,9 +128,25 @@ public class PubsubFirehoseProducerWorker implements FirehoseProducerWorker<Mess
     public Subscriber newSubscriber(MessageReceiverWithAckResponse receiver);
   }
 
-  private static class PubsubFirehoseMessage implements Message {
+  /**
+   * The complexity in acking and nacking messages is in service of making those operations (a)
+   * mutually exclusive and (b) idempotent. This is required because a PubSub subscriber will hang
+   * forever if it is stopped while there are outstanding messages, so this worker has to nack all
+   * outstanding messages when it is stopped. This means that the ack and nack operations have to be
+   * thread-safe, since downstream tasks may be acking or nacking messages while the worker is
+   * nacking during cleanup.
+   */
+  private class PubsubFirehoseMessage implements Message {
+    private static final int NONE = 0;
+    private static final int ACKING = 10;
+    private static final int ACKED = 11;
+    private static final int NACKING = 20;
+    private static final int NACKED = 21;
+
+    private final AtomicInteger state = new AtomicInteger(NONE);
     private final PubsubMessage message;
     private final AckReplyConsumerWithResponse acker;
+    private volatile Throwable failureCause = null;
 
     public PubsubFirehoseMessage(PubsubMessage message, AckReplyConsumerWithResponse acker) {
       this.message = requireNonNull(message, "message");
@@ -120,43 +165,147 @@ public class PubsubFirehoseProducerWorker implements FirehoseProducerWorker<Mess
 
     @Override
     public void ack(AcknowledgementListener listener) {
-      final ApiFuture<AckResponse> future = acker.ack();
-      ApiFutures.addCallback(future, new ApiFutureCallback<AckResponse>() {
-        @Override
-        public void onSuccess(AckResponse result) {
-          if (result == AckResponse.SUCCESSFUL)
+      final int witness = state.compareAndExchange(NONE, ACKING);
+      switch (witness) {
+        case NONE:
+          outstanding.remove(this);
+          final ApiFuture<AckResponse> future = acker.ack();
+          ApiFutures.addCallback(future, new ApiFutureCallback<AckResponse>() {
+            @Override
+            public void onSuccess(AckResponse result) {
+              if (result == AckResponse.SUCCESSFUL) {
+                synchronized (PubsubFirehoseMessage.this) {
+                  state.set(ACKED);
+                  notifyAll();
+                }
+                listener.onSuccess();
+              } else
+                onFailure(new IOException("ack failed with response " + result));
+            }
+
+            @Override
+            public void onFailure(Throwable t) {
+              synchronized (PubsubFirehoseMessage.this) {
+                state.set(ACKED);
+                failureCause = t;
+                notifyAll();
+              }
+              listener.onFailure(t);
+            }
+          }, MoreExecutors.directExecutor());
+          break;
+        case ACKING:
+          synchronized (this) {
+            int thestate = state.get();
+            while (thestate == ACKING) {
+              try {
+                wait();
+              } catch (InterruptedException e) {
+                // This is unfortunate. This breaks the perfect idempotency of the nack operation.
+                // However, there isn't really anything else we can do here...
+                Thread.currentThread().interrupt();
+                listener.onFailure(e);
+                return;
+              }
+              thestate = state.get();
+            }
+            assert thestate == ACKED;
+          }
+          // Fall through...
+        case ACKED:
+          // already acked, be idempotent
+          if (failureCause == null)
             listener.onSuccess();
           else
-            listener.onFailure(new IOException("ack failed with response " + result));
-        }
-
-        @Override
-        public void onFailure(Throwable t) {
-          listener.onFailure(t);
-        }
-      }, MoreExecutors.directExecutor());
+            listener.onFailure(failureCause);
+          break;
+        case NACKING:
+        case NACKED:
+          // already nacked, we're in a bad state
+          listener.onFailure(new IllegalStateException("message already nacked"));
+          break;
+        default:
+          throw new AssertionError("unexpected state state: " + witness);
+      }
     }
 
     @Override
     public void nack(AcknowledgementListener listener) {
-      final ApiFuture<AckResponse> future = acker.nack();
-      ApiFutures.addCallback(future, new ApiFutureCallback<AckResponse>() {
-        @Override
-        public void onSuccess(AckResponse result) {
-          if (result == AckResponse.SUCCESSFUL)
+      final int witness = state.compareAndExchange(NONE, NACKING);
+      switch (witness) {
+        case NONE:
+          outstanding.remove(this);
+          final ApiFuture<AckResponse> future = acker.nack();
+          ApiFutures.addCallback(future, new ApiFutureCallback<AckResponse>() {
+            @Override
+            public void onSuccess(AckResponse result) {
+              if (result == AckResponse.SUCCESSFUL) {
+                synchronized (PubsubFirehoseMessage.this) {
+                  state.set(NACKED);
+                  notifyAll();
+                }
+                listener.onSuccess();
+              } else
+                onFailure(new IOException("nack failed with response " + result));
+            }
+
+            @Override
+            public void onFailure(Throwable t) {
+              synchronized (PubsubFirehoseMessage.this) {
+                state.set(NACKED);
+                failureCause = t;
+                notifyAll();
+              }
+              listener.onFailure(t);
+            }
+          }, MoreExecutors.directExecutor());
+          break;
+        case NACKING:
+          synchronized (this) {
+            int thestate = state.get();
+            while (thestate == NACKING) {
+              try {
+                wait();
+              } catch (InterruptedException e) {
+                // This is unfortunate. This breaks the perfect idempotency of the nack operation.
+                // However, there isn't really anything else we can do here...
+                Thread.currentThread().interrupt();
+                listener.onFailure(e);
+                return;
+              }
+              thestate = state.get();
+            }
+            assert thestate == NACKED;
+          }
+          // Fall through...
+        case NACKED:
+          // already acked, be idempotent
+          if (failureCause == null)
             listener.onSuccess();
           else
-            listener.onFailure(new IOException("nack failed with response " + result));
-        }
+            listener.onFailure(failureCause);
+          break;
+        case ACKING:
+        case ACKED:
+          // already nacked, be idempotent
+          listener.onSuccess();
+          break;
+        default:
+          throw new AssertionError("unexpected state state: " + witness);
+      }
+    }
 
-        @Override
-        public void onFailure(Throwable t) {
-          listener.onFailure(t);
-        }
-      }, MoreExecutors.directExecutor());
+    public int hashCode() {
+      return System.identityHashCode(this);
+    }
+
+    public boolean equals(Object that) {
+      return this == that;
     }
   }
 
+  private final Set<PubsubFirehoseMessage> outstanding =
+      Collections.newSetFromMap(new ConcurrentHashMap<>());
   private final AtomicLong receivedMetric = new AtomicLong(0);
   private final SubscriberFactory subscriberFactory;
 
@@ -174,15 +323,27 @@ public class PubsubFirehoseProducerWorker implements FirehoseProducerWorker<Mess
             @Override
             public void receiveMessage(PubsubMessage message,
                 AckReplyConsumerWithResponse consumer) {
+              final PubsubFirehoseMessage m = new PubsubFirehoseMessage(message, consumer);
+
+              if (LOGGER.isTraceEnabled()) {
+                // Let's guard this specific logging call with a check to avoid spamming the
+                // System.identityHashCode() method for every message needlessly
+                LOGGER.atTrace().addKeyValue("identity", m.hashCode())
+                    .log("Received message from PubSub");
+              }
+
+              outstanding.add(m);
               try {
-                sink.put(new PubsubFirehoseMessage(message, consumer));
+                sink.put(m);
                 receivedMetric.incrementAndGet();
               } catch (InterruptedException e) {
+                outstanding.remove(m);
                 Thread.currentThread().interrupt();
                 LOGGER.atWarn().setCause(e)
                     .log("Interrupted while trying to put message. Stopping...");
                 failureCauses.offer(e);
               } catch (Throwable e) {
+                outstanding.remove(m);
                 LOGGER.atError().setCause(e).log("Failed to put message. Stopping...");
                 failureCauses.offer(e);
               }
@@ -214,12 +375,7 @@ public class PubsubFirehoseProducerWorker implements FirehoseProducerWorker<Mess
 
         LOGGER.atInfo().log("Subscriber connected");
 
-        Throwable failureCause;
-        try {
-          failureCause = failureCauses.take();
-        } finally {
-          LOGGER.atInfo().log("Subscriber finally");
-        }
+        Throwable failureCause = failureCauses.take();
         if (failureCause instanceof Error e)
           throw e;
         if (failureCause instanceof InterruptedException e)
@@ -229,13 +385,25 @@ public class PubsubFirehoseProducerWorker implements FirehoseProducerWorker<Mess
         throw new AssertionError("Unexpected error", failureCause);
       } finally {
         try {
-          LOGGER.atInfo().log("Stopping subscriber");
-          subscriber.stopAsync().awaitTerminated();
-          LOGGER.atInfo().log("Subscriber stopped");
+          LOGGER.atDebug().log("Stopping subscriber");
+
+          subscriber.stopAsync();
+
+          // So this looks super funny. In a perfect world, we'd be able to call a method on the
+          // subscriber to stop it, and it would just stop. Maybe subsequent acks or nacks would
+          // fail, but that would be fine. However, Google's PubSub library doesn't work that way.
+          // Instead, it will just hang forever until all outstanding messages are acked or
+          // nacked. Neat! So we need to keep a reference to all outstanding messages, and then nack
+          // them all when we stop the subscriber. Cool, right? So we do that here. That way, this
+          // worker always stops, even if downstream tasks don't ack or nack messages.
+          nackOutstandingMessages();
+
+          subscriber.awaitTerminated();
+
+          LOGGER.atDebug().log("Subscriber stopped");
         } catch (IllegalStateException e) {
-          LOGGER.atWarn().setCause(e).log("Subscriber was already stopped. Ignoring...");
-        } finally {
-          LOGGER.atInfo().log("Subscriber finally2");
+          LOGGER.atWarn().setCause(e)
+              .log("Failed to stop subscriber because subscriber was already stopped. Ignoring...");
         }
         if (Thread.currentThread().isInterrupted())
           throw new InterruptedException();
@@ -259,6 +427,35 @@ public class PubsubFirehoseProducerWorker implements FirehoseProducerWorker<Mess
       if (cause instanceof Exception x)
         throw new IOException("Pubsub firehose failed", x);
       throw new AssertionError("Unexpected error", e);
+    }
+  }
+
+  /**
+   * Nacks all outstanding messages. This is called when the worker is stopped to ensure that the
+   * subscriber doesn't hang forever waiting for all messages to be acked or nacked. Which it will
+   * absolutely do if we don't do ensure that all outstanding messages are acked or nacked.
+   */
+  private void nackOutstandingMessages() {
+    while (!outstanding.isEmpty()) {
+      LOGGER.atDebug().log("Nacking outstanding messages...");
+      final Iterator<PubsubFirehoseMessage> iterator = outstanding.iterator();
+      while (iterator.hasNext()) {
+        final PubsubFirehoseMessage message = iterator.next();
+        message.nack(new AcknowledgementListener() {
+          @Override
+          public void onSuccess() {
+            LOGGER.atTrace().addKeyValue("identity", message.hashCode())
+                .log("Successfully nacked message at stop time");
+          }
+
+          @Override
+          public void onFailure(Throwable t) {
+            LOGGER.atTrace().setCause(t).addKeyValue("identity", message.hashCode())
+                .log("Failed to nack message at stop time");
+          }
+        });
+        iterator.remove();
+      }
     }
   }
 

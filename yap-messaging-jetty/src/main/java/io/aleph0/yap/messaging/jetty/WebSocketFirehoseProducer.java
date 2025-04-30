@@ -44,10 +44,36 @@ import org.eclipse.jetty.websocket.client.WebSocketClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import io.aleph0.yap.core.Sink;
+import io.aleph0.yap.messaging.core.Acknowledgeable;
 import io.aleph0.yap.messaging.core.FirehoseMetrics;
 import io.aleph0.yap.messaging.core.FirehoseProducerWorker;
 import io.aleph0.yap.messaging.core.Message;
 
+/**
+ * A {@link FirehoseProducerWorker} that connects to a WebSocket server and sends messages to a
+ * {@link Sink}.
+ * 
+ * <p>
+ * The given {@link MessageFactory} is used to create messages from the text and binary frames
+ * received from the WebSocket server. The {@link WebsocketConfigurator} is used to configure the
+ * WebSocket client and the HTTP client used to connect to the server.
+ * 
+ * <p>
+ * Because the {@code MessageFactory} is responsible for creating messages, it is also responsible
+ * for defining the ack and nack semantics. Users should take care to ensure that the implemented
+ * semantics match the {@link Acknowledgeable required semantics}, particularly idempotence and
+ * mutually exclusive acks and nacks.
+ * 
+ * <p>
+ * On sink failure, the worker will close the socket gracefully and fail.
+ * 
+ * <p>
+ * On socket error, the worker will simply close the socket and fail.
+ * 
+ * <p>
+ * On interrupt, the worker will attempt to close the connection gracefully. If this takes too long,
+ * then it will simply close the socket. The worker will then propagate the interrupt.
+ */
 public class WebSocketFirehoseProducer implements FirehoseProducerWorker<Message> {
   private static final Logger LOGGER = LoggerFactory.getLogger(WebSocketFirehoseProducer.class);
 

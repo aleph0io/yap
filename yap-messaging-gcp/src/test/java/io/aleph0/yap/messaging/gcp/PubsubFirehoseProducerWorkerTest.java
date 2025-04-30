@@ -33,6 +33,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.testcontainers.containers.PubSubEmulatorContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -78,7 +79,7 @@ public class PubsubFirehoseProducerWorkerTest {
   private Publisher publisher;
 
   @BeforeEach
-  void setUp() throws Exception {
+  void setupPubsubFirehoseProducerWorkerTest() throws Exception {
     // Set up connection to emulator
     ManagedChannel channel =
         ManagedChannelBuilder.forTarget(emulator.getEmulatorEndpoint()).usePlaintext().build();
@@ -114,7 +115,7 @@ public class PubsubFirehoseProducerWorkerTest {
   }
 
   @AfterEach
-  void tearDown() throws Exception {
+  void cleanupPubsubFirehoseProducerWorkerTest() throws Exception {
     // Clean up resources
     if (publisher != null) {
       publisher.shutdown();
@@ -140,6 +141,7 @@ public class PubsubFirehoseProducerWorkerTest {
   }
 
   @Test
+  @Timeout(30)
   void testPubsubFirehoseProducerWorker() throws Exception {
     // Create a sink to receive messages
     BlockingQueue<Message> receivedMessages = new LinkedBlockingQueue<>();
@@ -203,28 +205,29 @@ public class PubsubFirehoseProducerWorkerTest {
       assertThat(message.attributes()).containsEntry("key", "value");
     }
 
-    // Test acknowledgement
-    CountDownLatch ackLatch = new CountDownLatch(messageCount);
+    // Test acknowledgement on ONE MESSAGE ONLY. Explicitly DO NOT ack all messages. We need to test
+    // that the worker doesn't hang forever if we don't ack all messages.
+    CountDownLatch ackLatch = new CountDownLatch(1);
     AtomicBoolean ackSuccess = new AtomicBoolean(true);
-    for (int i = 0; i < messageCount; i++) {
-      Message message = messages.get(i);
-      message.ack(new Acknowledgeable.AcknowledgementListener() {
-        @Override
-        public void onSuccess() {
-          ackLatch.countDown();
-        }
+    messages.get(0).ack(new Acknowledgeable.AcknowledgementListener() {
+      @Override
+      public void onSuccess() {
+        ackLatch.countDown();
+      }
 
-        @Override
-        public void onFailure(Throwable t) {
-          t.printStackTrace();
-          ackSuccess.set(false);
-          ackLatch.countDown();
-        }
-      });
-    }
+      @Override
+      public void onFailure(Throwable t) {
+        t.printStackTrace();
+        ackSuccess.set(false);
+        ackLatch.countDown();
+      }
+    });
 
     assertThat(ackLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(ackSuccess.get()).isTrue();
+
+    // Make sure that there were actually unacked messages
+    assertThat(messageCount).isGreaterThan(1);
 
     // Check metrics
     FirehoseMetrics metrics = worker.checkMetrics();

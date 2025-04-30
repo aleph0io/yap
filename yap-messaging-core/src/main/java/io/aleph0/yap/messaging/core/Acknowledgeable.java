@@ -20,13 +20,55 @@
 package io.aleph0.yap.messaging.core;
 
 public interface Acknowledgeable {
+  /**
+   * A listener that is notified when an acknowledgement or negative acknowledgement is complete.
+   */
   public static interface AcknowledgementListener {
     public void onSuccess();
 
     public void onFailure(Throwable t);
   }
 
+  /**
+   * Acknowledge this object. Generally used to indicate that the message has been processed
+   * successfully and can safely be removed from its respective source.
+   * 
+   * <p>
+   * This method guarantees that the given listener will be called exactly once, with either
+   * {@link #onSuccess() success} or {@link #onFailure(Throwable) failure}.
+   * 
+   * <p>
+   * This operation is idempotent, meaning that calling it multiple times will have the same effect
+   * as calling it once.
+   * 
+   * <p>
+   * This method is mutually exclusive with {@link #nack(AcknowledgementListener) nack}, meaning
+   * that if this method is called, then a subsequent call to the nack method should fail.
+   * 
+   * @param listener the listener to notify when the acknowledgement is complete, either
+   *        successfully or with an error.
+   */
   public void ack(AcknowledgementListener listener);
 
+  /**
+   * Negatively acknowledge this object. Generally used to indicate that there was an error
+   * processing the message, and it should be retried according to the semantics of its respective
+   * source.
+   * 
+   * <p>
+   * This method guarantees that the given listener will be called exactly once, with either
+   * {@link #onSuccess() success} or {@link #onFailure(Throwable) failure}.
+   * 
+   * <p>
+   * This operation is idempotent, meaning that calling it multiple times will have the same effect
+   * as calling it once.
+   * 
+   * <p>
+   * This method is mutually exclusive with {@link #ack(AcknowledgementListener) ack}, meaning that
+   * if this method is called, then a subsequent call to the ack method should fail.
+   * 
+   * @param listener the listener to notify when the negative acknowledgement is complete, either
+   *        successfully or with an error.
+   */
   public void nack(AcknowledgementListener listener);
 }
