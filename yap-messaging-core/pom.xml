@@ -3,8 +3,9 @@
 
     <parent>
         <groupId>io.aleph0</groupId>
-        <artifactId>yap</artifactId>
+        <artifactId>yap-parent</artifactId>
         <version>0.0.0-b5-SNAPSHOT</version>
+        <relativePath>../yap-parent/pom.xml</relativePath>
     </parent>
 
     <artifactId>yap-messaging-core</artifactId>
@@ -20,7 +21,6 @@
         <dependency>
             <groupId>io.aleph0</groupId>
             <artifactId>yap-core</artifactId>
-            <version>${project.version}</version>
         </dependency>
         
         <!-- testing -->

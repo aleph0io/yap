@@ -1,0 +1,74 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.aleph0</groupId>
+        <artifactId>yap</artifactId>
+        <version>0.0.0-b5-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>yap-bom</artifactId>
+    <name>yap-bom</name>
+    <packaging>pom</packaging>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>flatten-maven-plugin</artifactId>
+                <version>1.7.0</version>
+                <configuration>
+                    <flattenMode>bom</flattenMode>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>flatten-process-resources</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>flatten</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>flatten-clean</id>
+                        <phase>clean</phase>
+                        <goals>
+                            <goal>clean</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>io.aleph0</groupId>
+                <artifactId>yap-core</artifactId>
+                <version>0.0.0-b5-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>io.aleph0</groupId>
+                <artifactId>yap-messaging-core</artifactId>
+                <version>0.0.0-b5-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>io.aleph0</groupId>
+                <artifactId>yap-messaging-gcp</artifactId>
+                <version>0.0.0-b5-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>io.aleph0</groupId>
+                <artifactId>yap-messaging-jetty</artifactId>
+                <version>0.0.0-b5-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>io.aleph0</groupId>
+                <artifactId>yap-messaging-test</artifactId>
+                <version>0.0.0-b5-SNAPSHOT</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+</project>

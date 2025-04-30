@@ -3,8 +3,9 @@
 
     <parent>
         <groupId>io.aleph0</groupId>
-        <artifactId>yap</artifactId>
+        <artifactId>yap-parent</artifactId>
         <version>0.0.0-b5-SNAPSHOT</version>
+        <relativePath>../yap-parent/pom.xml</relativePath>
     </parent>
 
     <artifactId>yap-core</artifactId>
