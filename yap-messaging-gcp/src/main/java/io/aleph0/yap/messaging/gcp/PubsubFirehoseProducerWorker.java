@@ -31,6 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BiConsumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.google.api.core.ApiFuture;
@@ -41,6 +42,7 @@ import com.google.cloud.pubsub.v1.AckReplyConsumerWithResponse;
 import com.google.cloud.pubsub.v1.AckResponse;
 import com.google.cloud.pubsub.v1.MessageReceiverWithAckResponse;
 import com.google.cloud.pubsub.v1.Subscriber;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.pubsub.v1.PubsubMessage;
 import io.aleph0.yap.core.Sink;
@@ -143,7 +145,8 @@ public class PubsubFirehoseProducerWorker implements FirehoseProducerWorker<Mess
    * thread-safe, since downstream tasks may be acking or nacking messages while the worker is
    * nacking during cleanup.
    */
-  private class PubsubFirehoseMessage implements Message<String> {
+  @VisibleForTesting
+  static class PubsubFirehoseMessage implements Message<String> {
     private static final int NONE = 0;
     private static final int ACKING = 10;
     private static final int ACKED = 11;
@@ -152,12 +155,16 @@ public class PubsubFirehoseProducerWorker implements FirehoseProducerWorker<Mess
 
     private final AtomicInteger state = new AtomicInteger(NONE);
     private final PubsubMessage message;
-    private final AckReplyConsumerWithResponse acker;
+    private final BiConsumer<PubsubFirehoseMessage, AcknowledgementListener> acker;
+    private final BiConsumer<PubsubFirehoseMessage, AcknowledgementListener> nacker;
     private volatile Throwable failureCause = null;
 
-    public PubsubFirehoseMessage(PubsubMessage message, AckReplyConsumerWithResponse acker) {
+    public PubsubFirehoseMessage(PubsubMessage message,
+        BiConsumer<PubsubFirehoseMessage, AcknowledgementListener> acker,
+        BiConsumer<PubsubFirehoseMessage, AcknowledgementListener> nacker) {
       this.message = requireNonNull(message, "message");
       this.acker = requireNonNull(acker, "acker");
+      this.nacker = requireNonNull(nacker, "nacker");
     }
 
     @Override
@@ -180,32 +187,32 @@ public class PubsubFirehoseProducerWorker implements FirehoseProducerWorker<Mess
       final int witness = state.compareAndExchange(NONE, ACKING);
       switch (witness) {
         case NONE:
-          outstanding.remove(this);
-          final ApiFuture<AckResponse> future = acker.ack();
-          ApiFutures.addCallback(future, new ApiFutureCallback<AckResponse>() {
+          acker.accept(this, new AcknowledgementListener() {
             @Override
-            public void onSuccess(AckResponse result) {
-              if (result == AckResponse.SUCCESSFUL) {
+            public void onSuccess() {
+              try {
+                listener.onSuccess();
+              } finally {
                 synchronized (PubsubFirehoseMessage.this) {
                   state.set(ACKED);
                   PubsubFirehoseMessage.this.notifyAll();
                 }
-                listener.onSuccess();
-              } else {
-                onFailure(new IOException("ack failed with response " + result));
               }
             }
 
             @Override
             public void onFailure(Throwable t) {
-              synchronized (PubsubFirehoseMessage.this) {
-                state.set(ACKED);
-                failureCause = t;
-                PubsubFirehoseMessage.this.notifyAll();
+              try {
+                listener.onFailure(t);
+              } finally {
+                synchronized (PubsubFirehoseMessage.this) {
+                  state.set(ACKED);
+                  failureCause = t;
+                  PubsubFirehoseMessage.this.notifyAll();
+                }
               }
-              listener.onFailure(t);
             }
-          }, MoreExecutors.directExecutor());
+          });
           break;
         case ACKING:
           synchronized (PubsubFirehoseMessage.this) {
@@ -247,32 +254,32 @@ public class PubsubFirehoseProducerWorker implements FirehoseProducerWorker<Mess
       final int witness = state.compareAndExchange(NONE, NACKING);
       switch (witness) {
         case NONE:
-          outstanding.remove(this);
-          final ApiFuture<AckResponse> future = acker.nack();
-          ApiFutures.addCallback(future, new ApiFutureCallback<AckResponse>() {
+          nacker.accept(this, new AcknowledgementListener() {
             @Override
-            public void onSuccess(AckResponse result) {
-              if (result == AckResponse.SUCCESSFUL) {
+            public void onSuccess() {
+              try {
+                listener.onSuccess();
+              } finally {
                 synchronized (PubsubFirehoseMessage.this) {
                   state.set(NACKED);
                   PubsubFirehoseMessage.this.notifyAll();
                 }
-                listener.onSuccess();
-              } else {
-                onFailure(new IOException("nack failed with response " + result));
               }
             }
 
             @Override
             public void onFailure(Throwable t) {
-              synchronized (PubsubFirehoseMessage.this) {
-                state.set(NACKED);
-                failureCause = t;
-                PubsubFirehoseMessage.this.notifyAll();
+              try {
+                listener.onFailure(t);
+              } finally {
+                synchronized (PubsubFirehoseMessage.this) {
+                  state.set(NACKED);
+                  failureCause = t;
+                  PubsubFirehoseMessage.this.notifyAll();
+                }
               }
-              listener.onFailure(t);
             }
-          }, MoreExecutors.directExecutor());
+          });
           break;
         case NACKING:
           synchronized (PubsubFirehoseMessage.this) {
@@ -301,8 +308,8 @@ public class PubsubFirehoseProducerWorker implements FirehoseProducerWorker<Mess
           break;
         case ACKING:
         case ACKED:
-          // already nacked, be idempotent
-          listener.onSuccess();
+          // already acked, we're in a bad state
+          listener.onFailure(new IllegalStateException("message already acked"));
           break;
         default:
           throw new AssertionError("unexpected state state: " + witness);
@@ -337,7 +344,48 @@ public class PubsubFirehoseProducerWorker implements FirehoseProducerWorker<Mess
             @Override
             public void receiveMessage(PubsubMessage message,
                 AckReplyConsumerWithResponse consumer) {
-              final PubsubFirehoseMessage m = new PubsubFirehoseMessage(message, consumer);
+              // On acknowledgement or negative acknowledgement, remove the message from the set
+              // of outstanding messages. This is important because the subscriber will hang
+              // forever if we don't acknowledge all outstanding messages.
+              final BiConsumer<PubsubFirehoseMessage, AcknowledgementListener> acker = (m, l) -> {
+                outstanding.remove(m);
+                final ApiFuture<AckResponse> future = consumer.ack();
+                ApiFutures.addCallback(future, new ApiFutureCallback<AckResponse>() {
+                  @Override
+                  public void onSuccess(AckResponse result) {
+                    if (result == AckResponse.SUCCESSFUL) {
+                      l.onSuccess();
+                    } else {
+                      onFailure(new IOException("ack failed with response " + result));
+                    }
+                  }
+
+                  @Override
+                  public void onFailure(Throwable t) {
+                    l.onFailure(t);
+                  }
+                }, MoreExecutors.directExecutor());
+              };
+              final BiConsumer<PubsubFirehoseMessage, AcknowledgementListener> nacker = (m, l) -> {
+                outstanding.remove(m);
+                final ApiFuture<AckResponse> future = consumer.nack();
+                ApiFutures.addCallback(future, new ApiFutureCallback<AckResponse>() {
+                  @Override
+                  public void onSuccess(AckResponse result) {
+                    if (result == AckResponse.SUCCESSFUL) {
+                      l.onSuccess();
+                    } else {
+                      onFailure(new IOException("nack failed with response " + result));
+                    }
+                  }
+
+                  @Override
+                  public void onFailure(Throwable t) {
+                    l.onFailure(t);
+                  }
+                }, MoreExecutors.directExecutor());
+              };
+              final PubsubFirehoseMessage m = new PubsubFirehoseMessage(message, acker, nacker);
 
               if (LOGGER.isTraceEnabled()) {
                 // Let's guard this specific logging call with a check to avoid spamming the
