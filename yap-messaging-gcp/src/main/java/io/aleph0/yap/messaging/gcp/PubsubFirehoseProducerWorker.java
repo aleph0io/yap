@@ -106,7 +106,7 @@ import io.aleph0.yap.messaging.core.Message;
  * messages. This acts as a soft backpressure mechanism to ensure that the pipeline can keep up with
  * the rate of messages being sent to it.
  */
-public class PubsubFirehoseProducerWorker implements FirehoseProducerWorker<Message> {
+public class PubsubFirehoseProducerWorker implements FirehoseProducerWorker<Message<String>> {
   private static final Logger LOGGER = LoggerFactory.getLogger(PubsubFirehoseProducerWorker.class);
 
   /**
@@ -136,7 +136,7 @@ public class PubsubFirehoseProducerWorker implements FirehoseProducerWorker<Mess
    * thread-safe, since downstream tasks may be acking or nacking messages while the worker is
    * nacking during cleanup.
    */
-  private class PubsubFirehoseMessage implements Message {
+  private class PubsubFirehoseMessage implements Message<String> {
     private static final int NONE = 0;
     private static final int ACKING = 10;
     private static final int ACKED = 11;
@@ -151,6 +151,11 @@ public class PubsubFirehoseProducerWorker implements FirehoseProducerWorker<Mess
     public PubsubFirehoseMessage(PubsubMessage message, AckReplyConsumerWithResponse acker) {
       this.message = requireNonNull(message, "message");
       this.acker = requireNonNull(acker, "acker");
+    }
+
+    @Override
+    public String id() {
+      return message.getMessageId();
     }
 
     @Override
@@ -176,7 +181,7 @@ public class PubsubFirehoseProducerWorker implements FirehoseProducerWorker<Mess
               if (result == AckResponse.SUCCESSFUL) {
                 synchronized (PubsubFirehoseMessage.this) {
                   state.set(ACKED);
-                  notifyAll();
+                  PubsubFirehoseMessage.this.notifyAll();
                 }
                 listener.onSuccess();
               } else
@@ -188,18 +193,18 @@ public class PubsubFirehoseProducerWorker implements FirehoseProducerWorker<Mess
               synchronized (PubsubFirehoseMessage.this) {
                 state.set(ACKED);
                 failureCause = t;
-                notifyAll();
+                PubsubFirehoseMessage.this.notifyAll();
               }
               listener.onFailure(t);
             }
           }, MoreExecutors.directExecutor());
           break;
         case ACKING:
-          synchronized (this) {
+          synchronized (PubsubFirehoseMessage.this) {
             int thestate = state.get();
             while (thestate == ACKING) {
               try {
-                wait();
+                PubsubFirehoseMessage.this.wait();
               } catch (InterruptedException e) {
                 // This is unfortunate. This breaks the perfect idempotency of the nack operation.
                 // However, there isn't really anything else we can do here...
@@ -242,7 +247,7 @@ public class PubsubFirehoseProducerWorker implements FirehoseProducerWorker<Mess
               if (result == AckResponse.SUCCESSFUL) {
                 synchronized (PubsubFirehoseMessage.this) {
                   state.set(NACKED);
-                  notifyAll();
+                  PubsubFirehoseMessage.this.notifyAll();
                 }
                 listener.onSuccess();
               } else
@@ -254,18 +259,18 @@ public class PubsubFirehoseProducerWorker implements FirehoseProducerWorker<Mess
               synchronized (PubsubFirehoseMessage.this) {
                 state.set(NACKED);
                 failureCause = t;
-                notifyAll();
+                PubsubFirehoseMessage.this.notifyAll();
               }
               listener.onFailure(t);
             }
           }, MoreExecutors.directExecutor());
           break;
         case NACKING:
-          synchronized (this) {
+          synchronized (PubsubFirehoseMessage.this) {
             int thestate = state.get();
             while (thestate == NACKING) {
               try {
-                wait();
+                PubsubFirehoseMessage.this.wait();
               } catch (InterruptedException e) {
                 // This is unfortunate. This breaks the perfect idempotency of the nack operation.
                 // However, there isn't really anything else we can do here...
@@ -314,7 +319,7 @@ public class PubsubFirehoseProducerWorker implements FirehoseProducerWorker<Mess
   }
 
   @Override
-  public void produce(Sink<Message> sink) throws IOException, InterruptedException {
+  public void produce(Sink<Message<String>> sink) throws IOException, InterruptedException {
     try {
       final BlockingQueue<Throwable> failureCauses = new ArrayBlockingQueue<>(1);
 

@@ -74,7 +74,7 @@ import io.aleph0.yap.messaging.core.Message;
  * On interrupt, the worker will attempt to close the connection gracefully. If this takes too long,
  * then it will simply close the socket. The worker will then propagate the interrupt.
  */
-public class WebSocketFirehoseProducer implements FirehoseProducerWorker<Message> {
+public class WebSocketFirehoseProducer<T> implements FirehoseProducerWorker<Message<T>> {
   private static final Logger LOGGER = LoggerFactory.getLogger(WebSocketFirehoseProducer.class);
 
   @SuppressWarnings("serial")
@@ -98,30 +98,30 @@ public class WebSocketFirehoseProducer implements FirehoseProducerWorker<Message
     return new WebsocketConfigurator() {};
   }
 
-  public static interface MessageFactory {
-    public List<Message> newTextMessages(String text);
+  public static interface MessageFactory<T> {
+    public List<Message<T>> newTextMessages(String text);
 
-    public List<Message> newBinaryMessages(ByteBuffer bytes);
+    public List<Message<T>> newBinaryMessages(ByteBuffer bytes);
   }
 
   private final AtomicLong receivedMetric = new AtomicLong(0);
 
   private final URI uri;
   private final WebsocketConfigurator configurator;
-  private final MessageFactory messageFactory;
+  private final MessageFactory<T> messageFactory;
 
-  public WebSocketFirehoseProducer(URI uri, MessageFactory messageFactory) {
+  public WebSocketFirehoseProducer(URI uri, MessageFactory<T> messageFactory) {
     this(uri, defaultWebsocketConfigurator(), messageFactory);
   }
 
   public WebSocketFirehoseProducer(URI uri, WebsocketConfigurator configurator,
-      MessageFactory messageFactory) {
+      MessageFactory<T> messageFactory) {
     this.uri = requireNonNull(uri, "uri");
     this.configurator = requireNonNull(configurator, "configurator");
     this.messageFactory = requireNonNull(messageFactory, "messageFactory");
   }
 
-  public void produce(Sink<Message> sink) throws IOException, InterruptedException {
+  public void produce(Sink<Message<T>> sink) throws IOException, InterruptedException {
     try {
       final BlockingQueue<Throwable> failureCauses = new ArrayBlockingQueue<>(1);
 
@@ -205,11 +205,11 @@ public class WebSocketFirehoseProducer implements FirehoseProducerWorker<Message
    */
   @WebSocket(autoDemand = true)
   public class InternalSocketListener {
-    private final Sink<Message> sink;
+    private final Sink<Message<T>> sink;
     private final BlockingQueue<Throwable> failureCauses;
     private final CountDownLatch latch;
 
-    public InternalSocketListener(Sink<Message> sink, BlockingQueue<Throwable> failureCauses,
+    public InternalSocketListener(Sink<Message<T>> sink, BlockingQueue<Throwable> failureCauses,
         CountDownLatch latch) {
       this.sink = requireNonNull(sink, "sink");
       this.failureCauses = requireNonNull(failureCauses, "failureCauses");
@@ -224,7 +224,7 @@ public class WebSocketFirehoseProducer implements FirehoseProducerWorker<Message
 
     @OnWebSocketMessage
     public void onWebSocketText(Session session, String text) {
-      final List<Message> messages;
+      final List<Message<T>> messages;
       try {
         messages = messageFactory.newTextMessages(text);
       } catch (Exception e) {
@@ -239,7 +239,7 @@ public class WebSocketFirehoseProducer implements FirehoseProducerWorker<Message
 
     @OnWebSocketMessage
     public void onWebSocketBinary(Session session, ByteBuffer payload, Callback callback) {
-      final List<Message> messages;
+      final List<Message<T>> messages;
       try {
         messages = messageFactory.newBinaryMessages(payload);
       } catch (Exception e) {
@@ -254,9 +254,9 @@ public class WebSocketFirehoseProducer implements FirehoseProducerWorker<Message
       callback.succeed();
     }
 
-    private void putMessages(Session session, List<Message> messages) {
+    private void putMessages(Session session, List<Message<T>> messages) {
       try {
-        for (Message message : messages) {
+        for (Message<T> message : messages) {
           sink.put(message);
           receivedMetric.incrementAndGet();
         }

@@ -27,6 +27,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import org.junit.jupiter.api.AfterEach;
@@ -62,14 +63,20 @@ public class WebSocketFirehoseProducerTest {
   public void testProduceTextMessages()
       throws IOException, InterruptedException, URISyntaxException {
     // Given
-    final BlockingQueue<Message> sinkQueue = new LinkedBlockingQueue<>();
-    final Sink<Message> sink = sinkQueue::offer;
+    final BlockingQueue<Message<String>> sinkQueue = new LinkedBlockingQueue<>();
+    final Sink<Message<String>> sink = sinkQueue::offer;
 
-    final WebSocketFirehoseProducer.MessageFactory messageFactory =
-        new WebSocketFirehoseProducer.MessageFactory() {
+    final WebSocketFirehoseProducer.MessageFactory<String> messageFactory =
+        new WebSocketFirehoseProducer.MessageFactory<>() {
           @Override
-          public List<Message> newTextMessages(String text) {
-            return List.of(new Message() {
+          public List<Message<String>> newTextMessages(String text) {
+            return List.of(new Message<>() {
+              private final String id = UUID.randomUUID().toString();
+
+              public String id() {
+                return id;
+              }
+
               @Override
               public void ack(AcknowledgementListener listener) {}
 
@@ -89,20 +96,20 @@ public class WebSocketFirehoseProducerTest {
           }
 
           @Override
-          public List<Message> newBinaryMessages(ByteBuffer bytes) {
+          public List<Message<String>> newBinaryMessages(ByteBuffer bytes) {
             throw new UnsupportedOperationException();
           }
         };
 
-    final WebSocketFirehoseProducer producer =
-        new WebSocketFirehoseProducer(serverUri, messageFactory);
+    final WebSocketFirehoseProducer<String> producer =
+        new WebSocketFirehoseProducer<>(serverUri, messageFactory);
 
     producer.produce(sink);
 
     assertThat(sinkQueue).hasSize(NUM_EVENTS);
 
     final FirehoseMetrics metrics = producer.checkMetrics();
-    
+
     assertThat(metrics.received()).isEqualTo(NUM_EVENTS);
   }
 }

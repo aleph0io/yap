@@ -144,10 +144,10 @@ public class PubsubFirehoseProducerWorkerTest {
   @Timeout(30)
   void testPubsubFirehoseProducerWorker() throws Exception {
     // Create a sink to receive messages
-    BlockingQueue<Message> receivedMessages = new LinkedBlockingQueue<>();
-    Sink<Message> sink = new Sink<Message>() {
+    BlockingQueue<Message<String>> receivedMessages = new LinkedBlockingQueue<>();
+    Sink<Message<String>> sink = new Sink<Message<String>>() {
       @Override
-      public void put(Message message) throws InterruptedException {
+      public void put(Message<String> message) throws InterruptedException {
         receivedMessages.offer(message);
       }
     };
@@ -189,9 +189,9 @@ public class PubsubFirehoseProducerWorkerTest {
     }
 
     // Wait for all messages to be received
-    List<Message> messages = new ArrayList<>();
+    List<Message<String>> messages = new ArrayList<>();
     for (int i = 0; i < messageCount; i++) {
-      Message message = receivedMessages.poll(10, TimeUnit.SECONDS);
+      Message<String> message = receivedMessages.poll(10, TimeUnit.SECONDS);
       if (message == null) {
         fail("Timed out waiting for message " + i);
       }
@@ -200,7 +200,7 @@ public class PubsubFirehoseProducerWorkerTest {
 
     // Verify messages
     for (int i = 0; i < messageCount; i++) {
-      Message message = messages.get(i);
+      Message<String> message = messages.get(i);
       assertThat(messageTexts).contains(message.body());
       assertThat(message.attributes()).containsEntry("key", "value");
     }

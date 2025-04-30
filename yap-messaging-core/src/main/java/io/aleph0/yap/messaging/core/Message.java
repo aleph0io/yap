@@ -22,8 +22,21 @@ package io.aleph0.yap.messaging.core;
 import java.util.Map;
 
 
-public interface Message extends Acknowledgeable {
+public interface Message<T> extends Acknowledgeable {
+  /**
+   * The message ID. This is a unique identifier for the message. It should be unique across all
+   * messages in the system, but does not need to be globally unique. Re-delivery of the same
+   * message should result in the same ID.
+   */
+  public String id();
+
+  /**
+   * Optional key-value metadata associated with the message.
+   */
   public Map<String, String> attributes();
 
-  public String body();
+  /**
+   * The content of the message
+   */
+  public T body();
 }
