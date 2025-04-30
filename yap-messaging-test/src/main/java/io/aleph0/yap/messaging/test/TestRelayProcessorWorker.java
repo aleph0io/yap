@@ -76,8 +76,8 @@ public class TestRelayProcessorWorker<ValueT> implements RelayProcessorWorker<Va
   public void process(Source<ValueT> source, Sink<ValueT> sink)
       throws IOException, InterruptedException {
     try {
+      final AtomicReference<Throwable> failureCause = new AtomicReference<>(null);
       try {
-        final AtomicReference<Throwable> failureCause = new AtomicReference<>(null);
         for (ValueT value = source.take(); value != null; value = source.take()) {
           throwIfPresent(failureCause);
 
@@ -105,13 +105,12 @@ public class TestRelayProcessorWorker<ValueT> implements RelayProcessorWorker<Va
           submittedMetrics.incrementAndGet();
           awaitingMetrics.incrementAndGet();
         }
-
-        throwIfPresent(failureCause);
       } finally {
-        executor.shutdownNow();
+        executor.shutdown();
         // I'd rather wait forever, but this is only for testing, so that's fine.
         executor.awaitTermination(30, TimeUnit.SECONDS);
       }
+      throwIfPresent(failureCause);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       LOGGER.atError().setCause(e).log("Simulated relay interrupted. Failing task...");
