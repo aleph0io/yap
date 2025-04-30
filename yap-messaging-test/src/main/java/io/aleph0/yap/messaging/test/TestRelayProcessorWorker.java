@@ -57,7 +57,7 @@ public class TestRelayProcessorWorker<ValueT> implements RelayProcessorWorker<Va
   /**
    * Creates a new {@link TestRelayProcessorWorker} with the default scheduler.
    * 
-   * @see #defaultScheduler()
+   * @see Scheduler#defaultScheduler()
    */
   public TestRelayProcessorWorker() {
     this(Scheduler.defaultScheduler());

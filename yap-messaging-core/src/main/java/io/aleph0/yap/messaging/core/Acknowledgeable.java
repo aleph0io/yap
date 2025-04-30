@@ -35,7 +35,8 @@ public interface Acknowledgeable {
    * 
    * <p>
    * This method guarantees that the given listener will be called exactly once, with either
-   * {@link #onSuccess() success} or {@link #onFailure(Throwable) failure}.
+   * {@link AcknowledgementListener#onSuccess() success} or
+   * {@link AcknowledgementListener#onFailure(Throwable) failure}.
    * 
    * <p>
    * This operation is idempotent, meaning that calling it multiple times will have the same effect
@@ -57,7 +58,8 @@ public interface Acknowledgeable {
    * 
    * <p>
    * This method guarantees that the given listener will be called exactly once, with either
-   * {@link #onSuccess() success} or {@link #onFailure(Throwable) failure}.
+   * {@link AcknowledgementListener#onSuccess() success} or
+   * {@link AcknowledgementListener#onFailure(Throwable) failure}.
    * 
    * <p>
    * This operation is idempotent, meaning that calling it multiple times will have the same effect

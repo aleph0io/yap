@@ -56,8 +56,8 @@ import io.aleph0.yap.messaging.core.Message;
 /**
  * A {@link FirehoseProducerWorker firehose} that receives messages from Google Pubsub and writes
  * them to the given sink as {@link Message yap messages}. Downstream consumers are responsible for
- * {@link Message#ack() acknowledging} or {@link Message#nack() negatively acknowledging} the
- * messages.
+ * {@link Message#ack(AcknowledgementListener) acknowledging} or
+ * {@link Message#nack(AcknowledgementListener) negatively acknowledging} the messages.
  * 
  * <p>
  * On sink failure, the worker will stop the internal PubSub subscriber and fail the task. All
