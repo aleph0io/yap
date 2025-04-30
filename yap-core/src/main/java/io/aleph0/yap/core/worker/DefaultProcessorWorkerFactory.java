@@ -31,6 +31,12 @@ import io.aleph0.yap.core.Source;
  * A {@link ProcessorWorkerFactory} that creates and manages multiple
  * {@link MeasuredProcessorWorker}s and tracks their metrics.
  * 
+ * <p>
+ * This factory uses a {@link BinaryOperator} to aggregate the metrics of all active workers. If
+ * there are no active workers, the metrics will be null. If there is one active worker, the metrics
+ * will be the metrics of that worker. If there are multiple active workers, the metrics will be the
+ * result of applying the {@link BinaryOperator} to the metrics of all active workers.
+ * 
  * @param <InputT> the type of the input
  * @param <OutputT> the type of the output
  * @param <MetricsT> the type of the metrics
