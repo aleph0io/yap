@@ -6,7 +6,7 @@
     <parent>
         <groupId>io.aleph0</groupId>
         <artifactId>yap</artifactId>
-        <version>0.0.0-b4-SNAPSHOT</version>
+        <version>0.0.0-b4</version>
     </parent>
 
     <artifactId>yap-messaging-jetty</artifactId>
