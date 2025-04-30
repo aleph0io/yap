@@ -199,8 +199,8 @@ public class PubsubRelayProcessorWorker<ValueT> implements RelayProcessorWorker<
   }
 
   public RelayMetrics checkMetrics() {
-    final long submitted = submittedMetric.getAndSet(0L);
-    final long acknowledged = acknowledgedMetric.getAndSet(0L);
+    final long submitted = submittedMetric.get();
+    final long acknowledged = acknowledgedMetric.get();
     final long awaiting = phaser.getUnarrivedParties() - 1;
     return new RelayMetrics(submitted, acknowledged, awaiting);
   }
