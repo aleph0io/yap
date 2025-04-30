@@ -213,9 +213,9 @@ public class PubsubRelayProcessorWorker<ValueT> implements RelayProcessorWorker<
   }
 
   public RelayMetrics flushMetrics() {
-    RelayMetrics metrics = checkMetrics();
+    RelayMetrics result = checkMetrics();
     submittedMetric.set(0);
     acknowledgedMetric.set(0);
-    return metrics;
+    return result;
   }
 }

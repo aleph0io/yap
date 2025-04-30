@@ -298,14 +298,14 @@ public class WebSocketFirehoseProducer<T> implements FirehoseProducerWorker<Mess
 
   @Override
   public FirehoseMetrics checkMetrics() {
-    final long events = receivedMetric.get();
-    return new FirehoseMetrics(events);
+    final long received = receivedMetric.get();
+    return new FirehoseMetrics(received);
   }
 
   @Override
   public FirehoseMetrics flushMetrics() {
-    FirehoseMetrics metrics = checkMetrics();
+    FirehoseMetrics result = checkMetrics();
     receivedMetric.set(0);
-    return metrics;
+    return result;
   }
 }

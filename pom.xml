@@ -194,6 +194,7 @@
     <modules>
         <module>yap-core</module>
         <module>yap-messaging-core</module>
+        <module>yap-messaging-test</module>
         <module>yap-messaging-gcp</module>
         <module>yap-messaging-jetty</module>
     </modules>

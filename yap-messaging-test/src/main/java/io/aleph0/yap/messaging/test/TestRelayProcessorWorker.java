@@ -17,12 +17,11 @@
  * limitations under the License.
  * ==================================LICENSE_END===================================
  */
-package io.aleph0.yap.messaging.core.relay;
+package io.aleph0.yap.messaging.test;
 
 import static java.util.Objects.requireNonNull;
 import java.io.IOException;
 import java.time.Duration;
-import java.util.Random;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -39,132 +38,37 @@ import io.aleph0.yap.messaging.core.RelayProcessorWorker;
 /**
  * A {@link RelayProcessorWorker relay} processor that simulates a "real" relay processor by
  * delaying the processing of messages. This is useful for testing and debugging purposes, as it
- * allows you to simulate the behavior of a relay processor without actually sending messages over
- * the network.
+ * allows you to simulate the behavior of a relay processor without actually sending the messages
+ * anywhere.
  * 
  * @param <ValueT> the type of the value to process
  */
-public class SimulatedRelayProcessor<ValueT> implements RelayProcessorWorker<ValueT> {
-  private static final Logger LOGGER = LoggerFactory.getLogger(SimulatedRelayProcessor.class);
+public class TestRelayProcessorWorker<ValueT> implements RelayProcessorWorker<ValueT> {
+  private static final Logger LOGGER = LoggerFactory.getLogger(TestRelayProcessorWorker.class);
 
-  /**
-   * Returns a scheduler that always returns the given delay. The delay must not be negative.
-   * 
-   * <p>
-   * It is generally recommended to use a {@link #randomScheduler(Duration, Duration) random
-   * scheduler} instead of a constant scheduler, as the constant scheduler will maintain message
-   * ordering, which probably does not reflect real-world behavior.
-   * 
-   * @param <ValueT> the type of the value to schedule
-   * @param delay the delay to return
-   * @return a scheduler that always returns the given delay
-   * @throws NullPointerException if delay is null
-   * @throws IllegalArgumentException if delay is negative
-   */
-  public static <ValueT> Scheduler<ValueT> constantScheduler(Duration delay) {
-    if (delay == null)
-      throw new NullPointerException("delay");
-    if (delay.isNegative())
-      throw new IllegalArgumentException("delay must not be negative");
-    return value -> delay;
-  }
-
-  /**
-   * Returns a scheduler that returns a random delay between base and base + jitter. Uses a default
-   * random number generator to generate the random delay.
-   * 
-   * @param <ValueT> the type of the value to schedule
-   * @param base the base delay
-   * @param jitter the maximum jitter to add to the base delay
-   * @return a scheduler that returns a random delay between base and base + jitter
-   * @throws NullPointerException if base or jitter is null
-   * @throws IllegalArgumentException if base or jitter is negative
-   */
-  public static <ValueT> Scheduler<ValueT> randomScheduler(Duration base, Duration jitter) {
-    return randomScheduler(new Random(), base, jitter);
-  }
-
-  /**
-   * Returns a scheduler that returns a random delay between base and base + jitter. Uses the given
-   * random number generator to generate the random delay.
-   * 
-   * @param <ValueT> the type of the value to schedule
-   * @param rand the random number generator to use
-   * @param base the base delay
-   * @param jitter the maximum jitter to add to the base delay
-   * @return a scheduler that returns a random delay between base and base + jitter
-   * @throws NullPointerException if rand, base or jitter is null
-   * @throws IllegalArgumentException if base or jitter is negative
-   */
-  public static <ValueT> Scheduler<ValueT> randomScheduler(Random rand, Duration base,
-      Duration jitter) {
-    if (rand == null)
-      throw new NullPointerException("rand");
-    if (base == null)
-      throw new NullPointerException("base");
-    if (jitter == null)
-      throw new NullPointerException("jitter");
-    if (base.isNegative())
-      throw new IllegalArgumentException("base must not be negative");
-    if (jitter.isNegative())
-      throw new IllegalArgumentException("jitter must not be negative");
-    if (jitter.isZero())
-      return constantScheduler(base);
-    return value -> {
-      final long baseNanos = base.toNanos();
-      final long jitterNanos = jitter.toNanos();
-      final long randomJitter = rand.nextLong(jitterNanos);
-      final long delayNanos = baseNanos + randomJitter;
-      return Duration.ofNanos(delayNanos);
-    };
-  }
-
-  /**
-   * Returns a scheduler that delays messages by a random amount between 80ms and 120ms.
-   * 
-   * @param <ValueT> the type of the value to schedule
-   * @return a scheduler that delays messages by a random amount between 80ms and 120ms
-   */
-  public static <ValueT> Scheduler<ValueT> defaultScheduler() {
-    return randomScheduler(Duration.ofMillis(80L), Duration.ofMillis(40L));
-  }
-
-  /**
-   * A scheduler that returns a delay for a value. The delay must not be negative.
-   */
-  @FunctionalInterface
-  public static interface Scheduler<ValueT> {
-    /**
-     * Returns the delay until the value should be scheduled. Must not be negative.
-     * 
-     * @param value the value to schedule
-     * @return the non-negative delay until the value should be scheduled
-     */
-    public Duration schedule(ValueT value);
-  }
 
   private final AtomicLong submittedMetrics = new AtomicLong(0);
   private final AtomicLong acknowledgedMetrics = new AtomicLong(0);
   private final AtomicLong awaitingMetrics = new AtomicLong(0);
   private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
 
-  private final Scheduler<ValueT> scheduler;
+  private final Scheduler scheduler;
 
   /**
-   * Creates a new {@link SimulatedRelayProcessor} with the default scheduler.
+   * Creates a new {@link TestRelayProcessorWorker} with the default scheduler.
    * 
    * @see #defaultScheduler()
    */
-  public SimulatedRelayProcessor() {
-    this(defaultScheduler());
+  public TestRelayProcessorWorker() {
+    this(Scheduler.defaultScheduler());
   }
 
   /**
-   * Creates a new {@link SimulatedRelayProcessor} with the given scheduler.
+   * Creates a new {@link TestRelayProcessorWorker} with the given scheduler.
    * 
    * @param scheduler the scheduler to use
    */
-  public SimulatedRelayProcessor(Scheduler<ValueT> scheduler) {
+  public TestRelayProcessorWorker(Scheduler scheduler) {
     this.scheduler = requireNonNull(scheduler, "scheduler");
   }
 
@@ -177,7 +81,7 @@ public class SimulatedRelayProcessor<ValueT> implements RelayProcessorWorker<Val
         for (ValueT value = source.take(); value != null; value = source.take()) {
           throwIfPresent(failureCause);
 
-          final Duration delay = scheduler.schedule(value);
+          final Duration delay = scheduler.schedule();
           if (delay.isNegative())
             throw new IllegalArgumentException("scheduler returned negative delay");
 
@@ -254,9 +158,9 @@ public class SimulatedRelayProcessor<ValueT> implements RelayProcessorWorker<Val
 
   @Override
   public RelayMetrics flushMetrics() {
-    final RelayMetrics metrics = checkMetrics();
+    final RelayMetrics result = checkMetrics();
     submittedMetrics.set(0);
     acknowledgedMetrics.set(0);
-    return metrics;
+    return result;
   }
 }
