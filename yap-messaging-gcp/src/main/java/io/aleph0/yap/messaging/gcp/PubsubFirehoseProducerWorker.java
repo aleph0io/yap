@@ -44,6 +44,7 @@ import com.google.cloud.pubsub.v1.Subscriber;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.pubsub.v1.PubsubMessage;
 import io.aleph0.yap.core.Sink;
+import io.aleph0.yap.core.task.TaskManager;
 import io.aleph0.yap.messaging.core.Acknowledgeable;
 import io.aleph0.yap.messaging.core.Acknowledgeable.AcknowledgementListener;
 import io.aleph0.yap.messaging.core.FirehoseMetrics;
@@ -104,7 +105,13 @@ import io.aleph0.yap.messaging.core.Message;
  * {@link Subscriber.Builder#setFlowControlSettings(com.google.api.gax.batching.FlowControlSettings)
  * flow control} for the subscriber to ensure that the subscriber does not overwhelm the worker with
  * messages. This acts as a soft backpressure mechanism to ensure that the pipeline can keep up with
- * the rate of messages being sent to it.
+ * the rate of messages being sent to it. If the downstream consumers are not able to keep up with
+ * the rate of messages being sent to them and the subscriber is not configured with flow control,
+ * then the message handling threads will start to block, which can lead to unpredictable results.
+ * Users can recognize this situation by checking this task's {@link TaskManager.Metrics task
+ * metrics} for high {@link TaskManager.Metrics#stalls()} or downstream tasks' metrics for high
+ * {@link TaskManager.Metrics#pending() pending messages}.
+ * 
  */
 public class PubsubFirehoseProducerWorker implements FirehoseProducerWorker<Message<String>> {
   private static final Logger LOGGER = LoggerFactory.getLogger(PubsubFirehoseProducerWorker.class);
@@ -184,8 +191,9 @@ public class PubsubFirehoseProducerWorker implements FirehoseProducerWorker<Mess
                   PubsubFirehoseMessage.this.notifyAll();
                 }
                 listener.onSuccess();
-              } else
+              } else {
                 onFailure(new IOException("ack failed with response " + result));
+              }
             }
 
             @Override
@@ -250,8 +258,9 @@ public class PubsubFirehoseProducerWorker implements FirehoseProducerWorker<Mess
                   PubsubFirehoseMessage.this.notifyAll();
                 }
                 listener.onSuccess();
-              } else
+              } else {
                 onFailure(new IOException("nack failed with response " + result));
+              }
             }
 
             @Override
@@ -339,6 +348,14 @@ public class PubsubFirehoseProducerWorker implements FirehoseProducerWorker<Mess
 
               outstanding.add(m);
               try {
+                // Note that this is (potentially) a blocking call. If the downstream sink is full,
+                // then this will block until the sink is able to accept the message. This producer
+                // is designed to be used with either (a) consumers that can keep up, (b) sinks that
+                // don't block, or (c) backpressure using configured flow control on the subscriber.
+                // If users find this call blocking, then they should consider either (a) tuning the
+                // downstream consumers to keep up, e.g., increasing the worker count; (b) using a
+                // sink that doesn't block, e.g., a queue with an unbounded capacity; or (c)
+                // configuring tighter flow control on the subscriber.
                 sink.put(m);
                 receivedMetric.incrementAndGet();
               } catch (InterruptedException e) {
@@ -404,14 +421,14 @@ public class PubsubFirehoseProducerWorker implements FirehoseProducerWorker<Mess
           nackOutstandingMessages();
 
           subscriber.awaitTerminated();
+          if (Thread.currentThread().isInterrupted())
+            throw new InterruptedException();
 
           LOGGER.atDebug().log("Subscriber stopped");
         } catch (IllegalStateException e) {
           LOGGER.atWarn().setCause(e)
               .log("Failed to stop subscriber because subscriber was already stopped. Ignoring...");
         }
-        if (Thread.currentThread().isInterrupted())
-          throw new InterruptedException();
       }
     } catch (InterruptedException e) {
       LOGGER.atError().setCause(e).log("Pubsub firehose interrupted. Propagating...");
