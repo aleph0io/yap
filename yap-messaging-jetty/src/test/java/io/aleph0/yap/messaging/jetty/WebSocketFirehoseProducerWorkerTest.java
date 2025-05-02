@@ -37,7 +37,7 @@ import io.aleph0.yap.core.Sink;
 import io.aleph0.yap.messaging.core.FirehoseMetrics;
 import io.aleph0.yap.messaging.core.Message;
 
-public class WebSocketFirehoseProducerTest {
+public class WebSocketFirehoseProducerWorkerTest {
   public static final int NUM_EVENTS = 10;
 
   private TestWebSocketServer server;
@@ -66,8 +66,8 @@ public class WebSocketFirehoseProducerTest {
     final BlockingQueue<Message<String>> sinkQueue = new LinkedBlockingQueue<>();
     final Sink<Message<String>> sink = sinkQueue::offer;
 
-    final WebSocketFirehoseProducer.MessageFactory<String> messageFactory =
-        new WebSocketFirehoseProducer.MessageFactory<>() {
+    final WebSocketFirehoseProducerWorker.MessageFactory<String> messageFactory =
+        new WebSocketFirehoseProducerWorker.MessageFactory<>() {
           @Override
           public List<Message<String>> newTextMessages(String text) {
             return List.of(new Message<>() {
@@ -101,8 +101,8 @@ public class WebSocketFirehoseProducerTest {
           }
         };
 
-    final WebSocketFirehoseProducer<String> producer =
-        new WebSocketFirehoseProducer<>(serverUri, messageFactory);
+    final WebSocketFirehoseProducerWorker<String> producer =
+        new WebSocketFirehoseProducerWorker<>(serverUri, messageFactory);
 
     producer.produce(sink);
 

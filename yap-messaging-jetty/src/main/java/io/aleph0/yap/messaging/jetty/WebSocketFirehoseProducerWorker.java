@@ -74,8 +74,8 @@ import io.aleph0.yap.messaging.core.Message;
  * On interrupt, the worker will attempt to close the connection gracefully. If this takes too long,
  * then it will simply close the socket. The worker will then propagate the interrupt.
  */
-public class WebSocketFirehoseProducer<T> implements FirehoseProducerWorker<Message<T>> {
-  private static final Logger LOGGER = LoggerFactory.getLogger(WebSocketFirehoseProducer.class);
+public class WebSocketFirehoseProducerWorker<T> implements FirehoseProducerWorker<Message<T>> {
+  private static final Logger LOGGER = LoggerFactory.getLogger(WebSocketFirehoseProducerWorker.class);
 
   @SuppressWarnings("serial")
   private static class NormalCloseException extends IOException {
@@ -110,11 +110,11 @@ public class WebSocketFirehoseProducer<T> implements FirehoseProducerWorker<Mess
   private final WebsocketConfigurator configurator;
   private final MessageFactory<T> messageFactory;
 
-  public WebSocketFirehoseProducer(URI uri, MessageFactory<T> messageFactory) {
+  public WebSocketFirehoseProducerWorker(URI uri, MessageFactory<T> messageFactory) {
     this(uri, defaultWebsocketConfigurator(), messageFactory);
   }
 
-  public WebSocketFirehoseProducer(URI uri, WebsocketConfigurator configurator,
+  public WebSocketFirehoseProducerWorker(URI uri, WebsocketConfigurator configurator,
       MessageFactory<T> messageFactory) {
     this.uri = requireNonNull(uri, "uri");
     this.configurator = requireNonNull(configurator, "configurator");
