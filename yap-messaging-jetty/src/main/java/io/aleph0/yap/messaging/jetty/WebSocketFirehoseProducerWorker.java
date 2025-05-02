@@ -55,7 +55,7 @@ import io.aleph0.yap.messaging.core.Message;
  * 
  * <p>
  * The given {@link MessageFactory} is used to create messages from the text and binary frames
- * received from the WebSocket server. The {@link WebsocketConfigurator} is used to configure the
+ * received from the WebSocket server. The {@link Configurator} is used to configure the
  * WebSocket client and the HTTP client used to connect to the server.
  * 
  * <p>
@@ -84,7 +84,7 @@ public class WebSocketFirehoseProducerWorker<T> implements FirehoseProducerWorke
     }
   }
 
-  public static interface WebsocketConfigurator {
+  public static interface Configurator {
     default void configureHttpClient(HttpClient client) {}
 
     default void configureWebSocketClient(WebSocketClient client) {}
@@ -94,8 +94,8 @@ public class WebSocketFirehoseProducerWorker<T> implements FirehoseProducerWorke
     default void configureSession(Session session) {}
   }
 
-  public static WebsocketConfigurator defaultWebsocketConfigurator() {
-    return new WebsocketConfigurator() {};
+  public static Configurator defaultConfigurator() {
+    return new Configurator() {};
   }
 
   public static interface MessageFactory<T> {
@@ -107,14 +107,14 @@ public class WebSocketFirehoseProducerWorker<T> implements FirehoseProducerWorke
   private final AtomicLong receivedMetric = new AtomicLong(0);
 
   private final URI uri;
-  private final WebsocketConfigurator configurator;
+  private final Configurator configurator;
   private final MessageFactory<T> messageFactory;
 
   public WebSocketFirehoseProducerWorker(URI uri, MessageFactory<T> messageFactory) {
-    this(uri, defaultWebsocketConfigurator(), messageFactory);
+    this(uri, defaultConfigurator(), messageFactory);
   }
 
-  public WebSocketFirehoseProducerWorker(URI uri, WebsocketConfigurator configurator,
+  public WebSocketFirehoseProducerWorker(URI uri, Configurator configurator,
       MessageFactory<T> messageFactory) {
     this.uri = requireNonNull(uri, "uri");
     this.configurator = requireNonNull(configurator, "configurator");
