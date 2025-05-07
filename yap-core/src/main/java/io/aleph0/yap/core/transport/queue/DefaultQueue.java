@@ -24,6 +24,7 @@ import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.List;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
@@ -106,7 +107,7 @@ public class DefaultQueue<T> implements Queue<T> {
     this.numSubscribers = subscriptions.size();
     for (Channel<T> subscription : subscriptions) {
       subscription.bind(new io.aleph0.yap.core.transport.Channel.Binding<>() {
-        private boolean closed = false;
+        private volatile boolean closed = false;
 
         @Override
         public boolean tryPublish(T message) {

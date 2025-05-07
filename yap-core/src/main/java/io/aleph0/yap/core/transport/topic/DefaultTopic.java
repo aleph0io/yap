@@ -21,6 +21,7 @@ package io.aleph0.yap.core.transport.topic;
 
 import static java.util.Collections.unmodifiableList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import io.aleph0.yap.core.build.TopicBuilder;
 import io.aleph0.yap.core.transport.Channel;
@@ -40,9 +41,9 @@ public class DefaultTopic<T> implements Topic<T> {
 
   private final AtomicLong sent = new AtomicLong(0);
   private final AtomicLong stalls = new AtomicLong(0);
+  private final AtomicBoolean closed = new AtomicBoolean(false);
 
   private final List<Channel<T>> subscribers;
-  private volatile boolean closed;
 
   public DefaultTopic(List<Channel<T>> subscribers) {
     if (subscribers == null)
@@ -53,7 +54,7 @@ public class DefaultTopic<T> implements Topic<T> {
   }
 
   public void publish(T message) throws InterruptedException {
-    if (closed)
+    if (closed.get())
       throw new IllegalStateException("closed");
     for (Channel<T> subscriber : subscribers) {
       boolean published = subscriber.tryPublish(message);
@@ -67,9 +68,10 @@ public class DefaultTopic<T> implements Topic<T> {
 
   @Override
   public void close() {
-    closed = true;
-    for (Channel<T> subscriber : subscribers)
-      subscriber.close();
+    if (closed.getAndSet(true) == false) {
+      for (Channel<T> subscriber : subscribers)
+        subscriber.close();
+    }
   }
 
   @Override

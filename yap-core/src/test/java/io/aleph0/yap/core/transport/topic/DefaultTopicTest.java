@@ -26,6 +26,8 @@ import static org.assertj.core.api.Assertions.fail;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
@@ -257,6 +259,46 @@ class DefaultTopicTest {
     }
   }
 
+  @Test
+  @Timeout(5)
+  public void givenTopic_whenClose_thenAllBlockedPublishersAreInterrupted()
+      throws InterruptedException {
+    Lock lock = new ReentrantLock();
+    Condition blocking = lock.newCondition();
+    Condition waiting = lock.newCondition();
+    BlockingChannel<String> channel = new BlockingChannel<>(lock, blocking, waiting);
+    List<Channel<String>> channels = List.of(channel);
+
+    Topic<String> topic = new DefaultTopic<>(channels);
+
+    final CountDownLatch latch = new CountDownLatch(1);
+    final Thread publishThread = new Thread(() -> {
+      try {
+        topic.publish("message");
+      } catch (InterruptedException e) {
+        // Don't count down on the latch if interrupted
+      } catch (IllegalStateException e) {
+        // Expected when the topic is closed
+        latch.countDown();
+      }
+    });
+
+    lock.lock();
+    try {
+      publishThread.start();
+      waiting.signalAll();
+    } finally {
+      lock.unlock();
+    }
+
+    final boolean test1 = latch.await(10, TimeUnit.MILLISECONDS);
+    assertThat(test1).isFalse();
+
+    topic.close();
+
+    latch.await();
+  }
+
   // Helper classes for testing
 
   private static class TestChannel<T> implements Channel<T> {
@@ -292,8 +334,6 @@ class DefaultTopicTest {
     private final Condition waiting;
     private boolean closed = false;
 
-
-
     public BlockingChannel(Lock lock, Condition blocking, Condition waiting) {
       this.lock = requireNonNull(lock);
       this.blocking = requireNonNull(blocking);
@@ -326,8 +366,11 @@ class DefaultTopicTest {
     public void close() {
       lock.lock();
       try {
-        closed = true;
-        waiting.signalAll();
+        if (closed == false) {
+          closed = true;
+          waiting.signalAll();
+          blocking.signalAll();
+        }
       } finally {
         lock.unlock();
       }

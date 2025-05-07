@@ -36,6 +36,7 @@ import io.aleph0.yap.core.ConsumerWorker;
 import io.aleph0.yap.core.Pipeline;
 import io.aleph0.yap.core.ProcessorWorker;
 import io.aleph0.yap.core.ProducerWorker;
+import io.aleph0.yap.core.Sink;
 import io.aleph0.yap.core.Source;
 import io.aleph0.yap.core.pipeline.DefaultPipeline;
 import io.aleph0.yap.core.pipeline.DefaultPipelineController;
@@ -376,12 +377,11 @@ public class PipelineBuilder {
                 public WorkerBody newWorkerBody() {
                   final ProducerWorker body = producer.workerFactory.newProducerWorker();
                   return () -> {
-                    body.produce(m -> {
-                      if (Thread.interrupted()) {
-                        Thread.currentThread().interrupt();
-                        throw new InterruptedException();
+                    body.produce(new Sink() {
+                      @Override
+                      public void put(Object value) throws InterruptedException {
+                        topic.publish(value);
                       }
-                      topic.publish(m);
                     });
                   };
                 }
@@ -420,27 +420,19 @@ public class PipelineBuilder {
                       @Override
                       public Object take(Duration timeout)
                           throws InterruptedException, TimeoutException {
-                        if (Thread.interrupted()) {
-                          Thread.currentThread().interrupt();
-                          throw new InterruptedException();
-                        }
                         return queue.receive(timeout);
                       }
 
                       @Override
                       public Object take() throws InterruptedException {
-                        if (Thread.interrupted()) {
-                          Thread.currentThread().interrupt();
-                          throw new InterruptedException();
-                        }
                         return queue.receive();
                       }
-                    }, m -> {
-                      if (Thread.interrupted()) {
-                        Thread.currentThread().interrupt();
-                        throw new InterruptedException();
+                    }, new Sink() {
+                      @Override
+                      public void put(Object value) throws InterruptedException {
+                        topic.publish(value);
                       }
-                      topic.publish(m);
+
                     });
                   };
                 }
@@ -479,19 +471,11 @@ public class PipelineBuilder {
                       @Override
                       public Object take(Duration timeout)
                           throws InterruptedException, TimeoutException {
-                        if (Thread.interrupted()) {
-                          Thread.currentThread().interrupt();
-                          throw new InterruptedException();
-                        }
                         return queue.receive(timeout);
                       }
 
                       @Override
                       public Object take() throws InterruptedException {
-                        if (Thread.interrupted()) {
-                          Thread.currentThread().interrupt();
-                          throw new InterruptedException();
-                        }
                         return queue.receive();
                       }
                     });

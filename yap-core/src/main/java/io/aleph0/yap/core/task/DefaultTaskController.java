@@ -292,6 +292,11 @@ public class DefaultTaskController<InputT, OutputT> implements TaskController {
    * produce output to downstream tasks (i.e., {@link ProducerWorker producer} and
    * {@link ProcessorWorker processors}). It is {@code null} for tasks which do not produce output
    * to a downstream task (i.e., {@link ConsumerWorker consumers}).
+   * 
+   * <p>
+   * Users can also close the topic to unblock publishers. This can be important to avoid deadlocks
+   * when a downstream task has canceled or failed and is no longer consuming messages, which can
+   * cause publishers to stall.
    */
   private final Topic<OutputT> topic;
 
@@ -474,6 +479,9 @@ public class DefaultTaskController<InputT, OutputT> implements TaskController {
       case CANCELING:
         // Welp, this is bad. Fail the task.
         state = state.to(TaskState.FAILING);
+        if (topic != null)
+          topic.close();
+        // TODO Should we drain or close queue?
         if (workers != 0) {
           for (int i = 1; i <= workers; i++)
             actions.add(TaskAction.newStopWorkerTaskAction());
@@ -500,6 +508,9 @@ public class DefaultTaskController<InputT, OutputT> implements TaskController {
       case COMPLETING:
         // Uh, sure, you're the boss. We'll stop the workers.
         state = state.to(TaskState.CANCELING);
+        if (topic != null)
+          topic.close();
+        // TODO Should we drain or close queue?
         if (workers == 0 && starting == 0) {
           state = state.to(TaskState.CANCELED);
           actions.add(TaskAction.newCancelTask());
