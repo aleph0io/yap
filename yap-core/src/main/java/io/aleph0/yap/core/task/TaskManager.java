@@ -239,18 +239,22 @@ public class TaskManager<WorkerMetricsT>
     public void run() {
       try {
         offer(new WorkerStartedEvent(id));
-        LOGGER.atDebug().addKeyValue("id", id).log("Worker started");
+        LOGGER.atDebug().addKeyValue("task", TaskManager.this.id).addKeyValue("worker", id)
+            .log("Worker started");
 
         body.run();
 
         offer(new WorkerCompletedEvent(id));
-        LOGGER.atDebug().addKeyValue("id", id).log("Worker completed normally");
+        LOGGER.atDebug().addKeyValue("task", TaskManager.this.id).addKeyValue("worker", id)
+            .log("Worker completed normally");
       } catch (InterruptedException e) {
         offer(new WorkerStoppedEvent(id));
-        LOGGER.atInfo().addKeyValue("id", id).log("Worker stopped");
+        LOGGER.atInfo().addKeyValue("task", TaskManager.this.id).addKeyValue("worker", id)
+            .log("Worker stopped");
       } catch (Throwable t) {
         offer(new WorkerFailedEvent(id, t));
-        LOGGER.atError().addKeyValue("id", id).setCause(t).log("Worker completed exceptionally");
+        LOGGER.atError().addKeyValue("task", TaskManager.this.id).addKeyValue("worker", id)
+            .setCause(t).log("Worker completed exceptionally");
       }
     }
 
@@ -487,7 +491,8 @@ public class TaskManager<WorkerMetricsT>
     List<TaskAction> result;
     switch (event) {
       case WorkerStartedEvent started: {
-        LOGGER.atDebug().addKeyValue("id", started.id).log("Worker started");
+        LOGGER.atDebug().addKeyValue("task", id).addKeyValue("worker", started.id)
+            .log("Worker started");
         // Added to workers in the action handler to capture Future object.
         result = controller.onWorkerStarted(started.id);
         metricCommencements.incrementAndGet();
@@ -495,7 +500,8 @@ public class TaskManager<WorkerMetricsT>
         break;
       }
       case WorkerCompletedEvent completed: {
-        LOGGER.atDebug().addKeyValue("id", completed.id).log("Worker completed normally");
+        LOGGER.atDebug().addKeyValue("task", id).addKeyValue("worker", completed.id)
+            .log("Worker completed normally");
         workers.remove(completed.id);
         result = controller.onWorkerCompletedNormally(completed.id);
         metricCompletions.incrementAndGet();
@@ -504,8 +510,8 @@ public class TaskManager<WorkerMetricsT>
         break;
       }
       case WorkerFailedEvent failed: {
-        LOGGER.atError().addKeyValue("id", failed.id).setCause(failed.cause)
-            .log("Worker completed exceptionally");
+        LOGGER.atError().addKeyValue("task", id).addKeyValue("worker", failed.id)
+            .setCause(failed.cause).log("Worker completed exceptionally");
         workers.remove(failed.id);
         result = controller.onWorkerCompletedExceptionally(failed.id, failed.cause);
         metricCompletions.incrementAndGet();
@@ -515,7 +521,8 @@ public class TaskManager<WorkerMetricsT>
         break;
       }
       case WorkerStoppedEvent stopped: {
-        LOGGER.atDebug().addKeyValue("id", stopped.id).log("Worker stopped");
+        LOGGER.atDebug().addKeyValue("task", id).addKeyValue("worker", stopped.id)
+            .log("Worker stopped");
         workers.remove(stopped.id);
         result = controller.onWorkerStopped(stopped.id);
         metricCompletions.incrementAndGet();
@@ -524,7 +531,7 @@ public class TaskManager<WorkerMetricsT>
         break;
       }
       case null: {
-        LOGGER.atDebug().log("Heartbeat");
+        LOGGER.atDebug().addKeyValue("task", id).log("Heartbeat");
         result = controller.onHeartbeat();
         break;
       }
@@ -537,28 +544,28 @@ public class TaskManager<WorkerMetricsT>
       case StartWorkerTaskAction(): {
         final StartedWorker<WorkerMetricsT> w = startWorker();
         workers.put(w.id, w.future);
-        LOGGER.atDebug().addKeyValue("id", w.id).log("Started worker");
+        LOGGER.atDebug().addKeyValue("task", id).addKeyValue("worker", w.id).log("Started worker");
         break;
       }
       case StopWorkerTaskAction(): {
-        final int id = stopAnyWorker();
-        LOGGER.atDebug().addKeyValue("id", id).log("Stopped worker");
+        final int wid = stopAnyWorker();
+        LOGGER.atDebug().addKeyValue("task", id).addKeyValue("worker", wid).log("Stopped worker");
         break;
       }
       case SucceedTaskAction(): {
         state = state.to(TaskState.SUCCEEDED);
-        LOGGER.atDebug().log("Succeeded task");
+        LOGGER.atDebug().addKeyValue("task", id).log("Succeeded task");
         break;
       }
       case CancelTaskAction(): {
         state = state.to(TaskState.CANCELED);
-        LOGGER.atDebug().log("Canceled task");
+        LOGGER.atDebug().addKeyValue("task", id).log("Canceled task");
         break;
       }
       case FailTaskAction(ExecutionException cause): {
         state = state.to(TaskState.FAILED);
         failureCause = cause;
-        LOGGER.atDebug().setCause(cause).log("Failed task");
+        LOGGER.atDebug().addKeyValue("task", id).setCause(cause).log("Failed task");
         break;
       }
       case null: {

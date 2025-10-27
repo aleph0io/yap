@@ -348,7 +348,7 @@ public class PipelineManager implements Measureable<PipelineManager.Metrics> {
     try {
       for (TaskManager taskBody : taskBodies)
         taskBody.addLifecycleListener(new WorkerLifecycleListener());
-
+ 
       state = state.to(PipelineState.RUNNING);
 
       LOGGER.atDebug().addKeyValue("pipeline", id).log("Pipeline manager started");

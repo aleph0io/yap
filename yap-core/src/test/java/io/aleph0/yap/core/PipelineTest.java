@@ -82,7 +82,7 @@ public class PipelineTest {
 
   @Test
   @Timeout(value = 5, unit = TimeUnit.SECONDS)
-  public void failureTest() {
+  public void failureTest() throws CancellationException, InterruptedException, ExecutionException {
 
     final PipelineBuilder pb = Pipeline.builder();
 
@@ -116,7 +116,7 @@ public class PipelineTest {
     });
     add1.addSubscriber(consumer);
     add3.addSubscriber(consumer);
-
+    
     assertThatThrownBy(() -> pb.addWrapper(MonitoredPipeline.newWrapper()).buildAndStart().await())
         .isInstanceOf(ExecutionException.class).hasCauseInstanceOf(RuntimeException.class)
         .hasMessageContaining("simulated failure");
