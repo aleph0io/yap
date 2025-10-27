@@ -37,6 +37,7 @@ import org.junit.jupiter.api.Test;
 import io.aleph0.yap.core.Sink;
 import io.aleph0.yap.core.Source;
 import io.aleph0.yap.messaging.core.Acknowledgeable.AcknowledgementListener;
+import io.aleph0.yap.messaging.core.worker.SplitGateProcessorWorker;
 
 class SplitGateProcessorWorkerTest {
 

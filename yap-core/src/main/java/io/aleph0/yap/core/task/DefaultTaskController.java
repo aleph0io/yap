@@ -477,15 +477,18 @@ public class DefaultTaskController<InputT, OutputT> implements TaskController {
       case RUNNING:
       case COMPLETING:
       case CANCELING:
-        // Welp, this is bad. Fail the task.
+        // Welp, this is bad. Fail the task. Fail first to avoid race condition where other tasks
+        // complete before we can fail, which would lead to COMPLETED tasks that should have FAILED.
         state = state.to(TaskState.FAILING);
-        if (topic != null)
-          topic.close();
-        // TODO Should we drain or close queue?
         if (workers != 0) {
           for (int i = 1; i <= workers; i++)
             actions.add(TaskAction.newStopWorkerTaskAction());
         }
+        // Do not close the topic here. It's tempting to free up resources and unblock downstream
+        // users immediately, but it causes race conditions where other tasks could complete before
+        // we have a chance to fail.
+        // if (topic != null)
+        //   topic.close();
         // Fall through...
       case FAILING:
         if (workers == 0) {
@@ -506,11 +509,9 @@ public class DefaultTaskController<InputT, OutputT> implements TaskController {
     switch (state) {
       case RUNNING:
       case COMPLETING:
-        // Uh, sure, you're the boss. We'll stop the workers.
+        // Uh, sure, you're the boss. We'll stop the workers. Do it before we close the topic to
+        // avoid race conditions where other tasks could complete before we can fail.
         state = state.to(TaskState.CANCELING);
-        if (topic != null)
-          topic.close();
-        // TODO Should we drain or close queue?
         if (workers == 0 && starting == 0) {
           state = state.to(TaskState.CANCELED);
           actions.add(TaskAction.newCancelTask());
@@ -518,6 +519,11 @@ public class DefaultTaskController<InputT, OutputT> implements TaskController {
           for (int i = 0; i < workers; i++)
             actions.add(TaskAction.newStopWorkerTaskAction());
         }
+        // Do not close the topic here. It's tempting to free up resources and unblock downstream
+        // users immediately, but it causes race conditions where other tasks could complete before
+        // we have a chance to cancel.
+        // if (topic != null)
+        //   topic.close();
         break;
       case FAILING:
         // We don't override a failing state with a cancel. We just let the failure run its course.

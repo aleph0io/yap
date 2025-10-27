@@ -17,11 +17,11 @@
  * limitations under the License.
  * ==================================LICENSE_END===================================
  */
-package io.aleph0.yap.messaging.core;
+package io.aleph0.yap.messaging.core.worker;
 
 import java.util.Collection;
 import java.util.function.Function;
-import io.aleph0.yap.messaging.core.SimpleSplitGateProcessorWorker.SimpleSplitGateBody;
+import io.aleph0.yap.messaging.core.worker.SimpleSplitGateProcessorWorker.SimpleSplitGateBody;
 
 public class SimpleSplitGateProcessorWorker<X, Y>
     extends SplitGateProcessorWorker<X, SimpleSplitGateBody<X, Y>> {

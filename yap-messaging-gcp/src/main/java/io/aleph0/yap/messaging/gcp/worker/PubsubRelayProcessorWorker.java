@@ -17,7 +17,7 @@
  * limitations under the License.
  * ==================================LICENSE_END===================================
  */
-package io.aleph0.yap.messaging.gcp;
+package io.aleph0.yap.messaging.gcp.worker;
 
 import static java.util.Objects.requireNonNull;
 import java.io.IOException;
@@ -38,7 +38,7 @@ import io.aleph0.yap.core.Sink;
 import io.aleph0.yap.core.Source;
 import io.aleph0.yap.core.task.TaskController;
 import io.aleph0.yap.messaging.core.RelayMetrics;
-import io.aleph0.yap.messaging.core.RelayProcessorWorker;
+import io.aleph0.yap.messaging.core.worker.RelayProcessorWorker;
 
 /**
  * A {@link RelayProcessorWorker relay} that receives inputs from upstream, extracts zero or more

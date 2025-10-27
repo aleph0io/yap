@@ -6,7 +6,7 @@
     <parent>
         <groupId>io.aleph0</groupId>
         <artifactId>yap</artifactId>
-        <version>0.0.0-b10</version>
+        <version>0.0.0-b11-SNAPSHOT</version>
     </parent>
 
     <artifactId>yap-parent</artifactId>
@@ -97,7 +97,7 @@
             <dependency>
                 <groupId>io.aleph0</groupId>
                 <artifactId>yap-bom</artifactId>
-                <version>0.0.0-b10</version>
+                <version>0.0.0-b11-SNAPSHOT</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

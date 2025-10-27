@@ -17,7 +17,7 @@
  * limitations under the License.
  * ==================================LICENSE_END===================================
  */
-package io.aleph0.yap.messaging.gcp;
+package io.aleph0.yap.messaging.gcp.worker;
 
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -35,7 +35,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import com.google.pubsub.v1.PubsubMessage;
 import io.aleph0.yap.messaging.core.Acknowledgeable.AcknowledgementListener;
-import io.aleph0.yap.messaging.gcp.PubsubFirehoseProducerWorker.PubsubFirehoseMessage;
+import io.aleph0.yap.messaging.gcp.worker.PubsubFirehoseProducerWorker.PubsubFirehoseMessage;
 
 /**
  * Test various attributes of the PubsubFirehoseProducerWorker.PubsubFirehoseMessage class,

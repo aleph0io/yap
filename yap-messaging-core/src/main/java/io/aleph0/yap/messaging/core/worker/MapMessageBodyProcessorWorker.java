@@ -17,11 +17,27 @@
  * limitations under the License.
  * ==================================LICENSE_END===================================
  */
-package io.aleph0.yap.messaging.core;
+package io.aleph0.yap.messaging.core.worker;
 
-import io.aleph0.yap.core.worker.MeasuredProcessorWorker;
+import static java.util.Objects.requireNonNull;
+import java.util.function.Function;
+import io.aleph0.yap.core.Sink;
+import io.aleph0.yap.messaging.core.acknowledger.NopAcknowledger;
 
-public interface RelayProcessorWorker<ValueT>
-    extends MeasuredProcessorWorker<ValueT, ValueT, RelayMetrics> {
+public class MapMessageBodyProcessorWorker<T, U>
+    extends AcknowledgingMessageBodyProcessorWorker<T, U> {
+  private final Function<T, U> mapper;
 
+  public MapMessageBodyProcessorWorker(Function<T, U> mapper) {
+    // A map processor is one-to-one, by definition, so there are no situations where we would want
+    // to acknowledge a message because we are dropping it.
+    super(new NopAcknowledger<>());
+    this.mapper = requireNonNull(mapper, "mapper");
+  }
+
+  @Override
+  protected void doProcessMessageBody(T inputBody, Sink<U> sink) throws Exception {
+    final U outputBody = mapper.apply(inputBody);
+    sink.put(outputBody);
+  }
 }

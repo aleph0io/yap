@@ -31,6 +31,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import io.aleph0.yap.core.Source;
+import io.aleph0.yap.messaging.core.worker.AcknowledgerConsumerWorker;
 
 public class AcknowledgerConsumerWorkerTest {
 
