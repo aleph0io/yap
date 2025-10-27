@@ -286,7 +286,7 @@ public class SplitGateProcessorWorker<X, Y>
    * original message once all splits are processed.
    * 
    * <p>
-   * This method can be overriden by subclasses to customize the creation of split messages, for
+   * This method can be overridden by subclasses to customize the creation of split messages, for
    * example to add additional attributes or to change the acknowledgment behavior. The default
    * implementation creates a simple message with the split body and the same attributes as the
    * original message, and uses a unique ID based on the original message ID and the index of the
