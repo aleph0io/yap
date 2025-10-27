@@ -62,7 +62,7 @@ import io.aleph0.yap.messaging.core.worker.SplitGateProcessorWorker.Metrics;
  * "Aggregator". In the EIP framework, this pattern would be implemented using a stateful message
  * store that tracked all children messages a little more explicitly, perhaps using control messages
  * instead of data messages. This class simply tracks all child messages in memory, since workers
- * always runin in a single process.
+ * always run in a single process.
  * </p>
  *
  * <p>
