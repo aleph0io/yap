@@ -17,7 +17,7 @@
  * limitations under the License.
  * ==================================LICENSE_END===================================
  */
-package io.aleph0.yap.messaging.gcp;
+package io.aleph0.yap.messaging.gcp.worker;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import java.io.IOException;
@@ -59,8 +59,8 @@ import com.google.pubsub.v1.PushConfig;
 import io.aleph0.yap.core.Sink;
 import io.aleph0.yap.core.Source;
 import io.aleph0.yap.messaging.core.RelayMetrics;
-import io.aleph0.yap.messaging.gcp.PubsubRelayProcessorWorker.MessageExtractor;
-import io.aleph0.yap.messaging.gcp.PubsubRelayProcessorWorker.PublisherFactory;
+import io.aleph0.yap.messaging.gcp.worker.PubsubRelayProcessorWorker.MessageExtractor;
+import io.aleph0.yap.messaging.gcp.worker.PubsubRelayProcessorWorker.PublisherFactory;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 

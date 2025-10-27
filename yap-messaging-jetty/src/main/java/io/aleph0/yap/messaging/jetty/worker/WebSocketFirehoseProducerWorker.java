@@ -17,7 +17,7 @@
  * limitations under the License.
  * ==================================LICENSE_END===================================
  */
-package io.aleph0.yap.messaging.jetty;
+package io.aleph0.yap.messaging.jetty.worker;
 
 import static java.util.Objects.requireNonNull;
 import java.io.IOException;
@@ -46,8 +46,8 @@ import org.slf4j.LoggerFactory;
 import io.aleph0.yap.core.Sink;
 import io.aleph0.yap.messaging.core.Acknowledgeable;
 import io.aleph0.yap.messaging.core.FirehoseMetrics;
-import io.aleph0.yap.messaging.core.FirehoseProducerWorker;
 import io.aleph0.yap.messaging.core.Message;
+import io.aleph0.yap.messaging.core.worker.FirehoseProducerWorker;
 
 /**
  * A {@link FirehoseProducerWorker} that connects to a WebSocket server and sends messages to a

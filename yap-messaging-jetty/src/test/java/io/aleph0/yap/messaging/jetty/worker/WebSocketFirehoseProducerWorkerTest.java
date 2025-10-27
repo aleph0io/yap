@@ -17,7 +17,7 @@
  * limitations under the License.
  * ==================================LICENSE_END===================================
  */
-package io.aleph0.yap.messaging.jetty;
+package io.aleph0.yap.messaging.jetty.worker;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import java.io.IOException;
@@ -36,6 +36,7 @@ import org.junit.jupiter.api.Test;
 import io.aleph0.yap.core.Sink;
 import io.aleph0.yap.messaging.core.FirehoseMetrics;
 import io.aleph0.yap.messaging.core.Message;
+import io.aleph0.yap.messaging.jetty.TestWebSocketServer;
 
 public class WebSocketFirehoseProducerWorkerTest {
   public static final int NUM_EVENTS = 10;
@@ -67,7 +68,7 @@ public class WebSocketFirehoseProducerWorkerTest {
     final Sink<Message<String>> sink = sinkQueue::offer;
 
     final WebSocketFirehoseProducerWorker.MessageFactory<String> messageFactory =
-        new WebSocketFirehoseProducerWorker.MessageFactory<>() {
+        new io.aleph0.yap.messaging.jetty.worker.WebSocketFirehoseProducerWorker.MessageFactory<>() {
           @Override
           public List<Message<String>> newTextMessages(String text) {
             return List.of(new Message<>() {

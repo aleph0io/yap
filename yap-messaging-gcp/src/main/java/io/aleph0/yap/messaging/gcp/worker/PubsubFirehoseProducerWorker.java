@@ -17,7 +17,7 @@
  * limitations under the License.
  * ==================================LICENSE_END===================================
  */
-package io.aleph0.yap.messaging.gcp;
+package io.aleph0.yap.messaging.gcp.worker;
 
 import static java.util.Objects.requireNonNull;
 import java.io.IOException;
@@ -49,8 +49,8 @@ import io.aleph0.yap.core.Sink;
 import io.aleph0.yap.core.task.TaskManager;
 import io.aleph0.yap.messaging.core.Acknowledgeable;
 import io.aleph0.yap.messaging.core.Acknowledgeable.AcknowledgementListener;
+import io.aleph0.yap.messaging.core.worker.FirehoseProducerWorker;
 import io.aleph0.yap.messaging.core.FirehoseMetrics;
-import io.aleph0.yap.messaging.core.FirehoseProducerWorker;
 import io.aleph0.yap.messaging.core.Message;
 
 /**

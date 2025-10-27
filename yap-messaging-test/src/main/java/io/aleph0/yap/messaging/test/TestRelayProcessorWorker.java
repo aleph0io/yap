@@ -33,7 +33,7 @@ import org.slf4j.LoggerFactory;
 import io.aleph0.yap.core.Sink;
 import io.aleph0.yap.core.Source;
 import io.aleph0.yap.messaging.core.RelayMetrics;
-import io.aleph0.yap.messaging.core.RelayProcessorWorker;
+import io.aleph0.yap.messaging.core.worker.RelayProcessorWorker;
 
 /**
  * A {@link RelayProcessorWorker relay} processor that simulates a "real" relay processor by

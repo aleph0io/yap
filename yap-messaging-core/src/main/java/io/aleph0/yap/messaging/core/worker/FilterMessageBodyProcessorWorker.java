@@ -17,10 +17,27 @@
  * limitations under the License.
  * ==================================LICENSE_END===================================
  */
-package io.aleph0.yap.messaging.core;
+package io.aleph0.yap.messaging.core.worker;
 
-import io.aleph0.yap.core.worker.MeasuredProducerWorker;
+import static java.util.Objects.requireNonNull;
+import java.util.function.Predicate;
+import io.aleph0.yap.core.Sink;
+import io.aleph0.yap.messaging.core.Acknowledger;
+import io.aleph0.yap.messaging.core.Message;
 
-public interface FirehoseProducerWorker<OutputT extends Acknowledgeable>
-    extends MeasuredProducerWorker<OutputT, FirehoseMetrics> {
+public class FilterMessageBodyProcessorWorker<T>
+    extends AcknowledgingMessageBodyProcessorWorker<T, T> {
+  private final Predicate<T> predicate;
+
+  public FilterMessageBodyProcessorWorker(Acknowledger<Message<T>> acknowledger,
+      Predicate<T> predicate) {
+    super(acknowledger);
+    this.predicate = requireNonNull(predicate, "predicate");
+  }
+
+  @Override
+  protected void doProcessMessageBody(T inputBody, Sink<T> sink) throws Exception {
+    if (predicate.test(inputBody))
+      sink.put(inputBody);
+  }
 }

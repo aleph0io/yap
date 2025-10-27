@@ -27,8 +27,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import io.aleph0.yap.core.Sink;
 import io.aleph0.yap.messaging.core.FirehoseMetrics;
-import io.aleph0.yap.messaging.core.FirehoseProducerWorker;
 import io.aleph0.yap.messaging.core.Message;
+import io.aleph0.yap.messaging.core.worker.FirehoseProducerWorker;
 
 /**
  * A {@link FirehoseProducerWorker} that produces messages using a {@link Supplier} according to a

@@ -6,7 +6,7 @@
     <parent>
         <groupId>io.aleph0</groupId>
         <artifactId>yap</artifactId>
-        <version>0.0.0-b10</version>
+        <version>0.0.0-b11-SNAPSHOT</version>
     </parent>
 
     <artifactId>yap-bom</artifactId>
@@ -47,27 +47,27 @@
             <dependency>
                 <groupId>io.aleph0</groupId>
                 <artifactId>yap-core</artifactId>
-                <version>0.0.0-b10</version>
+                <version>0.0.0-b11-SNAPSHOT</version>
             </dependency>
             <dependency>
                 <groupId>io.aleph0</groupId>
                 <artifactId>yap-messaging-core</artifactId>
-                <version>0.0.0-b10</version>
+                <version>0.0.0-b11-SNAPSHOT</version>
             </dependency>
             <dependency>
                 <groupId>io.aleph0</groupId>
                 <artifactId>yap-messaging-gcp</artifactId>
-                <version>0.0.0-b10</version>
+                <version>0.0.0-b11-SNAPSHOT</version>
             </dependency>
             <dependency>
                 <groupId>io.aleph0</groupId>
                 <artifactId>yap-messaging-jetty</artifactId>
-                <version>0.0.0-b10</version>
+                <version>0.0.0-b11-SNAPSHOT</version>
             </dependency>
             <dependency>
                 <groupId>io.aleph0</groupId>
                 <artifactId>yap-messaging-test</artifactId>
-                <version>0.0.0-b10</version>
+                <version>0.0.0-b11-SNAPSHOT</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
