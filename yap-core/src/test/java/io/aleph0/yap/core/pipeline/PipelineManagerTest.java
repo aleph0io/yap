@@ -124,7 +124,7 @@ public class PipelineManagerTest {
     final Channel<String> channel = new DefaultChannel<>();
     final Queue<String> queue = new DefaultQueue<>(10, List.of(channel));
     final Topic<String> topic = new DefaultTopic<>(List.of(channel));
-    return new TaskManager<>(id, Set.of("subscriber"), executor, new TestTaskController(1),
+    return new TaskManager<>(1, id, Set.of("subscriber"), executor, new TestTaskController(1),
         createMockWorkerBodyFactory(sleepTime, shouldFail), queue, topic);
   }
 

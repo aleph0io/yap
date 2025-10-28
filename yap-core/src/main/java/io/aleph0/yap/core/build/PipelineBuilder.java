@@ -70,7 +70,53 @@ import io.aleph0.yap.core.worker.SingletonProducerWorkerFactory;
 public class PipelineBuilder {
   private static final AtomicInteger sequence = new AtomicInteger(1);
 
-  private ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+  private static String name(Runnable task) {
+    final String str = task.toString();
+    final int start = str.indexOf("<<");
+    if (start == -1)
+      return null;
+    final int end = str.indexOf(">>", start);
+    if (end == -1)
+      return null;
+    return str.substring(start + 2, end);
+  }
+
+  /**
+   * A reasonable {@link ExecutorService} for running pipeline tasks using virtual threads. This
+   * will cause each thread to run in its own virtual thread.
+   * 
+   * <p>
+   * This is the default for all new {@link PipelineBuilder} instances.
+   */
+  public static ExecutorService defaultVirtualThreadExecutorService() {
+    return Executors.newThreadPerTaskExecutor(task -> {
+      final String taskName = name(task);
+      Thread.Builder tb = Thread.ofVirtual();
+      if (taskName != null)
+        tb = tb.name(taskName);
+      return tb.unstarted(task);
+    });
+  }
+
+  /**
+   * A reasonable {@link ExecutorService} for running pipeline tasks using platform threads. This
+   * will cause each thread to run in its own platform thread.
+   * 
+   * <p>
+   * This service has the benefit of naming individual threads reasonably, which allows for easier
+   * debugging and profiling.
+   */
+  public static ExecutorService defaultPlatformThreadExecutorService() {
+    return Executors.newThreadPerTaskExecutor(task -> {
+      final String taskName = name(task);
+      Thread.Builder tb = Thread.ofPlatform();
+      if (taskName != null)
+        tb = tb.name(taskName);
+      return tb.unstarted(task);
+    });
+  }
+
+  private ExecutorService executor = defaultVirtualThreadExecutorService();
   private PipelineControllerBuilder controller = DefaultPipelineController.builder();
   private final Map<String, TaskBuilder> tasks = new LinkedHashMap<>();
   private final List<PipelineWrapper> wrappers = new ArrayList<>();
@@ -296,6 +342,8 @@ public class PipelineBuilder {
   }
 
   public Pipeline build() {
+    final int pipelineId = sequence.getAndIncrement();
+
     // Create our channels
     final Map<String, List<Channel<?>>> subscriptions = new LinkedHashMap<>();
     final Map<String, List<Channel<?>>> subscribers = new LinkedHashMap<>();
@@ -396,8 +444,8 @@ public class PipelineBuilder {
                   return producer.workerFactory.flushMetrics();
                 }
               };
-          runner = new TaskManager<>(task.getId(), producer.subscribers, executor, controller,
-              workerBodyFactory, null, topic);
+          runner = new TaskManager<>(pipelineId, task.getId(), producer.subscribers, executor,
+              controller, workerBodyFactory, null, topic);
           break;
         }
         case ProcessorTaskBuilder<?, ?, ?> processor: {
@@ -447,13 +495,11 @@ public class PipelineBuilder {
                   return processor.workerFactory.flushMetrics();
                 }
               };
-          runner = new TaskManager<>(task.getId(), processor.subscribers, executor, controller,
-              workerBodyFactory, queue, topic);
+          runner = new TaskManager<>(pipelineId, task.getId(), processor.subscribers, executor,
+              controller, workerBodyFactory, queue, topic);
           break;
         }
-        case
-
-            ConsumerTaskBuilder<?, ?> consumer: {
+        case ConsumerTaskBuilder<?, ?> consumer: {
           final Queue queue = queues.get(id);
           final TaskController controller = consumer.controller.build(queue);
           final TaskManager.WorkerBodyFactory<?> workerBodyFactory =
@@ -492,8 +538,8 @@ public class PipelineBuilder {
                   return consumer.workerFactory.flushMetrics();
                 }
               };
-          runner = new TaskManager(task.getId(), Set.of(), executor, controller, workerBodyFactory,
-              queue, null);
+          runner = new TaskManager(pipelineId, task.getId(), Set.of(), executor, controller,
+              workerBodyFactory, queue, null);
           break;
         }
       }
@@ -515,10 +561,8 @@ public class PipelineBuilder {
 
     final PipelineController pipelineController = controller.build(graph);
 
-    final int id = sequence.getAndIncrement();
-
-    Pipeline result =
-        new DefaultPipeline(new PipelineManager(id, executor, pipelineController, taskBodies));
+    Pipeline result = new DefaultPipeline(executor,
+        new PipelineManager(pipelineId, executor, pipelineController, taskBodies));
     for (PipelineWrapper wrapper : wrappers)
       result = wrapper.wrapPipeline(result);
 

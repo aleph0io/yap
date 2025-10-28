@@ -40,6 +40,7 @@ import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import io.aleph0.yap.core.Measureable;
+import io.aleph0.yap.core.build.PipelineBuilder;
 import io.aleph0.yap.core.task.action.CancelTaskAction;
 import io.aleph0.yap.core.task.action.FailTaskAction;
 import io.aleph0.yap.core.task.action.StartWorkerTaskAction;
@@ -226,13 +227,28 @@ public class TaskManager<WorkerMetricsT>
     public MetricsT flushMetrics();
   }
 
-  private class WorkerRunner implements Runnable {
+  private class MyTaskWorkerRunner implements TaskWorkerRunner {
     private final int id;
     private final WorkerBody body;
 
-    public WorkerRunner(int id, WorkerBody body) {
+    public MyTaskWorkerRunner(int id, WorkerBody body) {
       this.id = id;
       this.body = requireNonNull(body);
+    }
+
+    @Override
+    public int getPipelineId() {
+      return TaskManager.this.pipeline;
+    }
+
+    @Override
+    public String getTaskId() {
+      return TaskManager.this.id;
+    }
+
+    @Override
+    public int getWorkerId() {
+      return id;
     }
 
     @Override
@@ -261,6 +277,18 @@ public class TaskManager<WorkerMetricsT>
     private void offer(WorkerEvent event) {
       boolean success = events.offer(event);
       assert success;
+    }
+
+    /**
+     * Overriden to provide a thread name for easier debugging.
+     * 
+     * @see PipelineBuilder#defaultVirtualThreadExecutorService()
+     * @see PipelineBuilder#defaultPlatformThreadExecutorService()
+     */
+    @Override
+    public String toString() {
+      return String.format("<<pipeline-%d-task-%s-worker-%d>>", getPipelineId(), getTaskId(),
+          getWorkerId());
     }
   }
 
@@ -349,6 +377,7 @@ public class TaskManager<WorkerMetricsT>
   private final Map<Integer, Future<?>> workers = new HashMap<>();
   private final BlockingQueue<WorkerEvent> events = new LinkedBlockingQueue<>();
   private final List<LifecycleListener> lifecycleListeners = new CopyOnWriteArrayList<>();
+  private final int pipeline;
   private final String id;
   private final Set<String> subscribers;
   private final ExecutorService executor;
@@ -359,9 +388,10 @@ public class TaskManager<WorkerMetricsT>
   private volatile TaskState state = TaskState.READY;
   private ExecutionException failureCause = null;
 
-  public TaskManager(String id, Set<String> subscribers, ExecutorService executor,
+  public TaskManager(int pipeline, String id, Set<String> subscribers, ExecutorService executor,
       TaskController controller, WorkerBodyFactory<WorkerMetricsT> workerBodyFactory,
       Queue<?> queue, Topic<?> topic) {
+    this.pipeline = pipeline;
     this.id = requireNonNull(id);
     this.subscribers = unmodifiableSet(subscribers);
     this.executor = requireNonNull(executor);
@@ -369,6 +399,10 @@ public class TaskManager<WorkerMetricsT>
     this.workerBodyFactory = requireNonNull(workerBodyFactory);
     this.queue = queue;
     this.topic = topic;
+  }
+
+  public int getPipeline() {
+    return pipeline;
   }
 
   public String getId() {
@@ -577,14 +611,14 @@ public class TaskManager<WorkerMetricsT>
   }
 
 
-  private static record StartedWorker<MetricsT>(int id, TaskManager<MetricsT>.WorkerRunner worker,
-      Future<?> future) {
+  private static record StartedWorker<MetricsT>(int id,
+      TaskManager<MetricsT>.MyTaskWorkerRunner worker, Future<?> future) {
   }
 
   protected StartedWorker<WorkerMetricsT> startWorker() throws RejectedExecutionException {
     final int id = sequence.getAndIncrement();
     final WorkerBody body = workerBodyFactory.newWorkerBody();
-    final WorkerRunner worker = new WorkerRunner(id, body);
+    final MyTaskWorkerRunner worker = new MyTaskWorkerRunner(id, body);
     final Future<?> future = executor.submit(worker, null);
     return new StartedWorker<>(id, worker, future);
   }

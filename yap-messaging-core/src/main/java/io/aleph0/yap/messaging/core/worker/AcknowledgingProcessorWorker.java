@@ -34,6 +34,7 @@ import io.aleph0.yap.messaging.core.AcknowledgementFailureHandler;
 import io.aleph0.yap.messaging.core.Acknowledger;
 import io.aleph0.yap.messaging.core.AcknowledgerMetrics;
 import io.aleph0.yap.messaging.core.acknowledger.DefaultAcknowledger;
+import io.aleph0.yap.messaging.core.acknowledger.NopAcknowledger;
 
 /**
  * An abstract {@link ProcessorWorker} that receives inputs from upstream, processes the input into
@@ -50,8 +51,14 @@ import io.aleph0.yap.messaging.core.acknowledger.DefaultAcknowledger;
  * On sink failure, the worker will fail the task.
  * 
  * <p>
- * On acknowledgement failure, the worker may fail the task, at the discretion of its
- * {@link AcknowledgementFailureHandler failure handler}.
+ * The acknowledgment of dropped messages is handled by the given {@link Acknowledger}. By default,
+ * this will be a {@link DefaultAcknowledger} if none is given. Different implementations of the
+ * {@link Acknowledger} interface may be used to achieve different effects, e.g., using
+ * {@link NopAcknowledger} to disable acknowledgment of dropped messages.
+ * 
+ * <p>
+ * On acknowledgement failure of dropped messages, the worker may fail the task, at the discretion
+ * of its {@link AcknowledgementFailureHandler failure handler}.
  * 
  * <p>
  * On interrupt, the worker will stop receiving messages immediately.

@@ -40,6 +40,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import io.aleph0.yap.core.Measureable;
 import io.aleph0.yap.core.Pipeline;
+import io.aleph0.yap.core.PipelineCanceledException;
+import io.aleph0.yap.core.PipelineErrorException;
+import io.aleph0.yap.core.PipelineExecutionException;
+import io.aleph0.yap.core.build.PipelineBuilder;
 import io.aleph0.yap.core.pipeline.action.CancelPipelineAction;
 import io.aleph0.yap.core.pipeline.action.CancelTaskPipelineAction;
 import io.aleph0.yap.core.pipeline.action.FailPipelineAction;
@@ -80,7 +84,7 @@ import io.aleph0.yap.core.task.TaskManager;
  * decide what actions to take.
  * 
  */
-public class PipelineManager implements Measureable<PipelineManager.Metrics> {
+public class PipelineManager implements Measureable<PipelineManager.Metrics>, Runnable {
   private static final Logger LOGGER = LoggerFactory.getLogger(PipelineManager.class);
 
   public static record Metrics(
@@ -144,11 +148,27 @@ public class PipelineManager implements Measureable<PipelineManager.Metrics> {
     default void onPipelineFailed(int pipeline, Throwable cause) {}
   }
 
-  private class TaskRunner implements Runnable {
+  /**
+   * Overriden to provide a thread name for easier debugging.
+   * 
+   * @see PipelineBuilder#defaultVirtualThreadExecutorService()
+   * @see PipelineBuilder#defaultPlatformThreadExecutorService()
+   */
+  private class MyPipelineTaskRunner implements PipelineTaskRunner {
     private final TaskManager body;
 
-    public TaskRunner(TaskManager body) {
+    public MyPipelineTaskRunner(TaskManager body) {
       this.body = requireNonNull(body);
+    }
+
+    @Override
+    public int getPipelineId() {
+      return PipelineManager.this.id;
+    }
+
+    @Override
+    public String getTaskId() {
+      return body.getId();
     }
 
     @Override
@@ -166,6 +186,11 @@ public class PipelineManager implements Measureable<PipelineManager.Metrics> {
         LOGGER.atError().addKeyValue("pipeline", id).addKeyValue("task", body.getId()).setCause(t)
             .log("Pipeline task failed");
       }
+    }
+
+    @Override
+    public String toString() {
+      return String.format("<<pipeline-%d-task-%s>>", getPipelineId(), getTaskId());
     }
   }
 
@@ -344,11 +369,18 @@ public class PipelineManager implements Measureable<PipelineManager.Metrics> {
     lifecycleListeners.remove(listener);
   }
 
-  public void run() throws Exception {
+  /**
+   * Runs the pipeline manager, managing the lifecycle of the pipeline and its tasks.
+   * 
+   * @throws PipelineExecutionException if the pipeline fails normally
+   * @throws PipelineCanceledException if the pipeline is cancelled
+   * @throws PipelineErrorException if the pipeline fails due to an internal error
+   */
+  public void run() {
     try {
       for (TaskManager taskBody : taskBodies)
         taskBody.addLifecycleListener(new WorkerLifecycleListener());
- 
+
       state = state.to(PipelineState.RUNNING);
 
       LOGGER.atDebug().addKeyValue("pipeline", id).log("Pipeline manager started");
@@ -383,52 +415,74 @@ public class PipelineManager implements Measureable<PipelineManager.Metrics> {
     } catch (InterruptedException e) {
       LOGGER.atInfo().addKeyValue("pipeline", id)
           .log("Pipeline manager interrupted, treating as cancel request");
-      if (state.getPhase() != PipelinePhase.FINISHED) {
-        List<PipelineAction> actions = controller.onCancelRequested();
-        eventLoop(actions);
+      try {
+        if (state.getPhase() != PipelinePhase.FINISHED) {
+          List<PipelineAction> actions = controller.onCancelRequested();
+          notifyLifecycleListeners(listener -> listener.onPipelineCancelRequested(id));
+          eventLoop(actions);
+        }
+        switch (state) {
+          case COMPLETED:
+            LOGGER.atWarn().addKeyValue("pipeline", id)
+                .log("Pipeline completed, but after cancel request");
+            controller.onPipelineCompleted();
+            notifyLifecycleListeners(listener -> listener.onPipelineCompleted(id));
+            break;
+          case CANCELLED:
+            LOGGER.atInfo().addKeyValue("pipeline", id).log("Pipeline cancelled");
+            controller.onPipelineCancelled();
+            notifyLifecycleListeners(listener -> listener.onPipelineCancelled(id));
+            break;
+          case FAILED:
+            LOGGER.atWarn().addKeyValue("pipeline", id).setCause(failureCause)
+                .log("Pipeline failed, but after cancel request");
+            controller.onPipelineFailed(failureCause);
+            notifyLifecycleListeners(listener -> listener.onPipelineFailed(id, failureCause));
+            break;
+          default:
+            throw new PipelineErrorException(new IllegalStateException(
+                "Pipeline manager in invalid state after interrupt: " + state));
+        }
+      } catch (InterruptedException e2) {
+        // OK, we were interrupted again while trying to cancel. Just propagate.
+        LOGGER.atWarn().addKeyValue("pipeline", id)
+            .log("Pipeline manager interrupted again while cancelling; propagating...");
+        throw new PipelineCanceledException();
+      } catch (Exception e2) {
+        // Something went wrong while trying to cancel. Wrap and propagate.
+        LOGGER.atError().addKeyValue("pipeline", id).setCause(e2)
+            .log("Pipeline manager failed while cancelling; propagating...");
+        throw new PipelineErrorException(e2);
       }
-      switch (state) {
-        case COMPLETED:
-          LOGGER.atWarn().addKeyValue("pipeline", id)
-              .log("Pipeline completed, but after cancel request");
-          controller.onPipelineCompleted();
-          notifyLifecycleListeners(listener -> listener.onPipelineCompleted(id));
-          break;
-        case CANCELLED:
-          LOGGER.atInfo().addKeyValue("pipeline", id).log("Pipeline cancelled");
-          controller.onPipelineCancelled();
-          notifyLifecycleListeners(listener -> listener.onPipelineCancelled(id));
-          break;
-        case FAILED:
-          LOGGER.atWarn().addKeyValue("pipeline", id).setCause(failureCause)
-              .log("Pipeline failed, but after cancel request");
-          controller.onPipelineFailed(failureCause);
-          notifyLifecycleListeners(listener -> listener.onPipelineFailed(id, failureCause));
-          break;
-        default:
-          throw new IllegalStateException(
-              "Pipeline manager in invalid state after interrupt: " + state);
-      }
+      throw new PipelineCanceledException();
     } catch (Exception e) {
       LOGGER.atError().addKeyValue("pipeline", id).setCause(e).log(
           "Pipeline manager failed; hard failing pipeline, canceling all tasks, and propagating exception...");
-      state = PipelineState.FAILED;
-      for (Future<?> taskFuture : runningTasks.values())
-        taskFuture.cancel(true);
-      notifyLifecycleListeners(listener -> listener.onPipelineFailed(id, e));
-      throw e;
+      final PipelineErrorException problem = new PipelineErrorException(e);
+      try {
+        state = PipelineState.FAILED;
+        for (Future<?> taskFuture : runningTasks.values())
+          taskFuture.cancel(true);
+        notifyLifecycleListeners(listener -> {
+          listener.onPipelineFailed(id, e);
+        });
+      } catch (Exception e2) {
+        LOGGER.atError().addKeyValue("pipeline", id).setCause(e2)
+            .log("Lifecycle listener threw exception during pipeline failure notification");
+        problem.addSuppressed(e2);
+      }
+      throw problem;
     }
 
     // We want to propagate the failure cause if the pipeline failed for use in Future.get()
     if (state == PipelineState.FAILED && failureCause != null) {
       LOGGER.atDebug().addKeyValue("pipeline", id).setCause(failureCause)
           .log("Pipeline failed with exception, propagating...");
-      final Throwable cause = failureCause.getCause();
-      if (cause instanceof Exception)
-        throw (Exception) cause;
-      if (cause instanceof Error)
-        throw (Error) cause;
-      throw failureCause;
+      throw new PipelineExecutionException(failureCause);
+    }
+    if (state == PipelineState.CANCELLED) {
+      LOGGER.atDebug().addKeyValue("pipeline", id).log("Pipeline cancelled, propagating...");
+      throw new PipelineCanceledException();
     }
   }
 
@@ -451,14 +505,18 @@ public class PipelineManager implements Measureable<PipelineManager.Metrics> {
   List<PipelineAction> handleTaskEvent(PipelineEvent event) {
     List<PipelineAction> result;
     switch (event) {
-      case TaskStartedEvent(String taskId): {
+      case
+
+          TaskStartedEvent(String taskId): {
         LOGGER.atDebug().addKeyValue("pipeline", id).addKeyValue("task", taskId)
             .log("Task started");
         result = controller.onTaskStarted(taskId);
         notifyLifecycleListeners(listener -> listener.onPipelineTaskStarted(id, taskId));
         break;
       }
-      case TaskCompletedEvent(String taskId): {
+      case
+
+          TaskCompletedEvent(String taskId): {
         LOGGER.atDebug().addKeyValue("pipeline", id).addKeyValue("task", taskId)
             .log("Task completed");
         runningTasks.remove(taskId);
@@ -466,7 +524,9 @@ public class PipelineManager implements Measureable<PipelineManager.Metrics> {
         notifyLifecycleListeners(listener -> listener.onPipelineTaskCompleted(id, taskId));
         break;
       }
-      case TaskFailedEvent(String taskId, Throwable cause): {
+      case
+
+          TaskFailedEvent(String taskId, Throwable cause): {
         LOGGER.atError().addKeyValue("pipeline", id).addKeyValue("task", taskId).setCause(cause)
             .log("Task failed");
         runningTasks.remove(taskId);
@@ -474,7 +534,9 @@ public class PipelineManager implements Measureable<PipelineManager.Metrics> {
         notifyLifecycleListeners(listener -> listener.onPipelineTaskFailed(id, taskId, cause));
         break;
       }
-      case TaskCancelledEvent(String taskId): {
+      case
+
+          TaskCancelledEvent(String taskId): {
         LOGGER.atDebug().addKeyValue("pipeline", id).addKeyValue("task", taskId)
             .log("Task cancelled");
         runningTasks.remove(taskId);
@@ -482,7 +544,9 @@ public class PipelineManager implements Measureable<PipelineManager.Metrics> {
         notifyLifecycleListeners(listener -> listener.onPipelineTaskCancelled(id, taskId));
         break;
       }
-      case WorkerLifecycleEvent(String taskId, int workerId, Consumer<LifecycleListener> e): {
+      case
+
+          WorkerLifecycleEvent(String taskId, int workerId, Consumer<LifecycleListener> e): {
         LOGGER.atDebug().addKeyValue("pipeline", id).addKeyValue("task", taskId)
             .addKeyValue("worker", workerId).log("Worker lifecycle event");
         result = emptyList();
@@ -501,17 +565,21 @@ public class PipelineManager implements Measureable<PipelineManager.Metrics> {
 
   void performPipelineAction(PipelineAction action) throws InterruptedException {
     switch (action) {
-      case StartTaskPipelineAction(String taskId): {
+      case
+
+          StartTaskPipelineAction(String taskId): {
         LOGGER.atDebug().addKeyValue("pipeline", id).addKeyValue("task", taskId)
             .log("Starting pipeline task");
         final TaskManager taskBody = taskBodies.stream().filter(task -> task.getId().equals(taskId))
             .findFirst().orElseThrow();
-        final TaskRunner task = new TaskRunner(taskBody);
+        final MyPipelineTaskRunner task = new MyPipelineTaskRunner(taskBody);
         final Future<?> taskFuture = executor.submit(task);
         runningTasks.put(taskId, taskFuture);
         break;
       }
-      case CancelTaskPipelineAction(String taskId): {
+      case
+
+          CancelTaskPipelineAction(String taskId): {
         LOGGER.atDebug().addKeyValue("pipeline", id).addKeyValue("task", taskId)
             .log("Cancelling pipeline task");
         final Future<?> taskFuture = Optional.ofNullable(runningTasks.get(taskId)).orElseThrow();
@@ -528,7 +596,9 @@ public class PipelineManager implements Measureable<PipelineManager.Metrics> {
         state = state.to(PipelineState.CANCELLED);
         break;
       }
-      case FailPipelineAction(ExecutionException cause): {
+      case
+
+          FailPipelineAction(ExecutionException cause): {
         LOGGER.atDebug().addKeyValue("pipeline", id).setCause(cause).log("Failed pipeline");
         state = state.to(PipelineState.FAILED);
         failureCause = cause;
@@ -540,6 +610,7 @@ public class PipelineManager implements Measureable<PipelineManager.Metrics> {
         break;
       }
     }
+
   }
 
   private void notifyLifecycleListeners(Consumer<LifecycleListener> event) {
@@ -570,5 +641,16 @@ public class PipelineManager implements Measureable<PipelineManager.Metrics> {
     for (TaskManager task : taskBodies)
       task.flushMetrics();
     return result;
+  }
+
+  /**
+   * Overriden to provide a thread name for easier debugging.
+   * 
+   * @see PipelineBuilder#defaultVirtualThreadExecutorService()
+   * @see PipelineBuilder#defaultPlatformThreadExecutorService()
+   */
+  @Override
+  public String toString() {
+    return String.format("<<pipeline-%d-manager>>", id);
   }
 }

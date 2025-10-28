@@ -106,7 +106,7 @@ class TaskManagerTest {
     public RecordingTaskManager(String id, Set<String> subscribers, ExecutorService executor,
         TaskController controller, WorkerBodyFactory<MetricsT> workerBodyFactory, Queue<?> queue,
         Topic<?> topic) {
-      super(id, subscribers, executor, controller, workerBodyFactory, queue, topic);
+      super(1, id, subscribers, executor, controller, workerBodyFactory, queue, topic);
     }
 
     private final List<EventOrAction> eoas = new ArrayList<>();

@@ -25,7 +25,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.function.Consumer;
 import io.aleph0.yap.core.Pipeline;
@@ -33,11 +33,13 @@ import io.aleph0.yap.core.Pipeline;
 public class DefaultPipeline implements Pipeline {
   private final List<LifecycleListener> lifecycleListeners = new CopyOnWriteArrayList<>();
 
+  private final ExecutorService executor;
   private final PipelineManager manager;
   private volatile boolean cancelled = false;
   private volatile Future<?> future;
 
-  public DefaultPipeline(PipelineManager manager) {
+  public DefaultPipeline(ExecutorService executor, PipelineManager manager) {
+    this.executor = requireNonNull(executor);
     this.manager = requireNonNull(manager);
     this.manager.addLifecycleListener(new PipelineManagerLifecycleListenerAdapter());
   }
@@ -68,7 +70,7 @@ public class DefaultPipeline implements Pipeline {
       // If the pipeline is already started, we don't want to start it again.
       return;
     }
-    future = Executors.newVirtualThreadPerTaskExecutor().submit(new Callable<Void>() {
+    future = executor.submit(new Callable<Void>() {
       @Override
       public Void call() throws Exception {
         manager.run();
